@@ -14,6 +14,8 @@ import { cwdFolder, paneDetail, paneDisplayName } from "../../lib/names";
 import { relativeAge } from "../../lib/time";
 import { DevicePill } from "./DevicePill";
 import { dragHandlers } from "../DragRegion";
+import { SpaceMenu } from "./SpaceMenu";
+import { Tip } from "../ui/Tip";
 
 const AGENT_GROUPS: AgentStatus[] = ["blocked", "working", "done", "idle"];
 const GROUP_TITLE: Record<AgentStatus, string> = {
@@ -226,16 +228,20 @@ export function Sidebar() {
         <SectionHeader
           actions={
             <>
-              <HeaderButton
-                onClick={toggleHideQuiet}
-                label={hideQuiet ? "Show done and idle agents" : "Hide done and idle agents"}
-                active={hideQuiet}
-              >
-                <FunnelSimple size={14} aria-hidden />
-              </HeaderButton>
-              <HeaderButton onClick={() => void pickFolderForSpace()} label="New space from folder">
-                <FolderPlus size={14} aria-hidden />
-              </HeaderButton>
+              <Tip label={hideQuiet ? "Show done and idle agents" : "Hide done and idle agents"}>
+                <HeaderButton
+                  onClick={toggleHideQuiet}
+                  label={hideQuiet ? "Show done and idle agents" : "Hide done and idle agents"}
+                  active={hideQuiet}
+                >
+                  <FunnelSimple size={14} aria-hidden />
+                </HeaderButton>
+              </Tip>
+              <Tip label="New space from folder">
+                <HeaderButton onClick={() => void pickFolderForSpace()} label="New space from folder">
+                  <FolderPlus size={14} aria-hidden />
+                </HeaderButton>
+              </Tip>
             </>
           }
         >
@@ -261,6 +267,7 @@ export function Sidebar() {
           }
           return (
             <div key={ws.workspace_id}>
+              <SpaceMenu workspace={ws}>
               <Row
                 onClick={() => setScope(scopeId === ws.workspace_id ? null : ws.workspace_id)}
                 selected={scopeId === ws.workspace_id}
@@ -272,6 +279,7 @@ export function Sidebar() {
                 </span>
                 <span className="text-[12px] tabular-nums text-text-muted">{ws.pane_count}</span>
               </Row>
+              </SpaceMenu>
               {terminals.map((pane) => {
                 const k = cwdFolder(pane.cwd) ?? pane.pane_id;
                 const n = (seen.get(k) ?? 0) + 1;

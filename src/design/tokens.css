@@ -7,7 +7,7 @@
   color-scheme: dark;
 
   /* ---- Surfaces (hex literals; terminal theme reuses --surface-content) ---- */
-  --surface-content: #1e1e1e; /* solid: terminals must blend seamlessly */
+  --surface-content: rgb(30 30 30 / 0.72);
   --surface-opaque: #1e1e1e;
   --surface-sidebar: rgb(40 40 40 / 0.52);
   --surface-hover: rgb(255 255 255 / 0.05);
@@ -51,4 +51,12 @@
   /* ---- Type ---- */
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+
+/* Accessibility: honor the user's transparency preference — frost to solid. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --surface-content: #1e1e1e;
+    --surface-sidebar: #252525;
+  }
 }

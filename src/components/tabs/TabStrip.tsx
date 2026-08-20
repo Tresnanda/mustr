@@ -3,10 +3,14 @@
 // so it always confirms — through a Radix dialog, consequence-first.
 
 import { useState } from "react";
+import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Plus, X } from "@phosphor-icons/react";
-import { closeTab, type TabInfo } from "../../bridge/herdr";
+import { PencilSimple, Plus, X } from "@phosphor-icons/react";
+import { closeTab, renameTab, type TabInfo } from "../../bridge/herdr";
 import { useMustr } from "../../state/store";
+import { MENU_CONTENT, MENU_ITEM, MENU_SEPARATOR, MENU_SHADOW } from "../ui/menu";
+import { RenameDialog } from "../ui/RenameDialog";
+import { Tip } from "../ui/Tip";
 
 function CloseTabDialog({
   tab,
@@ -58,8 +62,9 @@ function CloseTabDialog({
 }
 
 export function TabStrip() {
-  const { tabs, selectedTabId, selectTab, newTerminal, panes, selectedPaneId } = useMustr();
+  const { tabs, selectedTabId, selectTab, newTerminal, panes, selectedPaneId, refresh } = useMustr();
   const [closing, setClosing] = useState<TabInfo | null>(null);
+  const [renaming, setRenaming] = useState<TabInfo | null>(null);
 
   const pane = panes.find((p) => p.pane_id === selectedPaneId);
   const workspaceTabs = tabs.filter((t) => t.workspace_id === pane?.workspace_id);
@@ -70,8 +75,9 @@ export function TabStrip() {
       {workspaceTabs.map((tab) => {
         const active = tab.tab_id === selectedTabId;
         return (
+          <ContextMenu.Root key={tab.tab_id}>
+          <ContextMenu.Trigger asChild>
           <div
-            key={tab.tab_id}
             className={`group flex h-7 items-center rounded-lg transition-colors duration-100 ${
               active ? "bg-selection" : "hover:bg-hover"
             }`}
@@ -95,20 +101,52 @@ export function TabStrip() {
               <X size={11} aria-hidden />
             </button>
           </div>
+          </ContextMenu.Trigger>
+          <ContextMenu.Portal>
+            <ContextMenu.Content className={MENU_CONTENT} style={MENU_SHADOW}>
+              <ContextMenu.Item
+                className={`${MENU_ITEM} text-text-primary`}
+                onSelect={() => setRenaming(tab)}
+              >
+                <PencilSimple size={15} className="text-text-secondary" aria-hidden />
+                Rename tab…
+              </ContextMenu.Item>
+              <ContextMenu.Separator className={MENU_SEPARATOR} />
+              <ContextMenu.Item
+                className={`${MENU_ITEM} text-status-blocked`}
+                onSelect={() => setClosing(tab)}
+              >
+                <X size={15} aria-hidden />
+                Close tab
+              </ContextMenu.Item>
+            </ContextMenu.Content>
+          </ContextMenu.Portal>
+          </ContextMenu.Root>
         );
       })}
-      <button
-        type="button"
-        onClick={() => void newTerminal()}
-        aria-label="New tab"
-        className="flex size-7 items-center justify-center rounded-lg text-text-muted transition-colors duration-100 hover:bg-hover hover:text-text-primary active:scale-[0.96]"
-      >
-        <Plus size={13} aria-hidden />
-      </button>
+      <Tip label="New tab">
+        <button
+          type="button"
+          onClick={() => void newTerminal()}
+          aria-label="New tab"
+          className="flex size-7 items-center justify-center rounded-lg text-text-muted transition-colors duration-100 hover:bg-hover hover:text-text-primary active:scale-[0.96]"
+        >
+          <Plus size={13} aria-hidden />
+        </button>
+      </Tip>
 
       <Dialog.Root open={closing !== null} onOpenChange={(open) => !open && setClosing(null)}>
         {closing && <CloseTabDialog tab={closing} onDone={() => setClosing(null)} />}
       </Dialog.Root>
+      {renaming && (
+        <RenameDialog
+          open
+          onOpenChange={(open) => !open && setRenaming(null)}
+          title={`Rename tab ${renaming.label}`}
+          initial={renaming.label}
+          onRename={(label) => void renameTab(renaming.tab_id, label).then(refresh)}
+        />
+      )}
     </div>
   );
 }

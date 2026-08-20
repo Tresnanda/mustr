@@ -5,6 +5,7 @@ import { STATUS_LABEL } from "./components/status";
 import { PaneGrid } from "./components/panes/PaneGrid";
 import { TabStrip } from "./components/tabs/TabStrip";
 import { dragHandlers } from "./components/DragRegion";
+import { TipProvider } from "./components/ui/Tip";
 import { statusSince, useMustr } from "./state/store";
 import { paneDisplayName } from "./lib/names";
 import { relativeAge } from "./lib/time";
@@ -69,6 +70,7 @@ export default function App() {
   }, [refresh, scheduleRefresh, setConnected, tick]);
 
   return (
+    <TipProvider>
     <div className="flex h-full">
       <aside className="w-[256px] shrink-0 border-r border-border-subtle bg-sidebar">
         <Sidebar />
@@ -98,5 +100,6 @@ export default function App() {
         </main>
       </div>
     </div>
+    </TipProvider>
   );
 }

@@ -114,6 +114,12 @@ export const createTab = (workspaceId: string) =>
   apiRequest<{ tab?: TabInfo; root_pane?: PaneInfo }>("tab.create", { workspace_id: workspaceId });
 export const closeTab = (tabId: string) => apiRequest("tab.close", { tab_id: tabId });
 export const focusTab = (tabId: string) => apiRequest("tab.focus", { tab_id: tabId });
+export const renameWorkspace = (workspaceId: string, label: string) =>
+  apiRequest("workspace.rename", { workspace_id: workspaceId, label });
+export const renameTab = (tabId: string, label: string) =>
+  apiRequest("tab.rename", { tab_id: tabId, label });
+export const closeWorkspace = (workspaceId: string) =>
+  apiRequest("workspace.close", { workspace_id: workspaceId });
 export const createWorkspace = (cwd: string) =>
   apiRequest<{ workspace?: WorkspaceInfo; root_pane?: PaneInfo }>("workspace.create", { cwd });
 

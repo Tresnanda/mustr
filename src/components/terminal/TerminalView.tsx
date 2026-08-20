@@ -17,8 +17,13 @@ import {
   paneScroll,
 } from "../../bridge/herdr";
 
+const REDUCED_TRANSPARENCY =
+  typeof window !== "undefined" &&
+  window.matchMedia("(prefers-reduced-transparency: reduce)").matches;
+
 const THEME: ITheme = {
-  background: "#1e1e1e",
+  // Fully transparent: the pane sits directly on the window's glass surface.
+  background: REDUCED_TRANSPARENCY ? "#1e1e1e" : "rgba(0,0,0,0)",
   foreground: "#d9d9d6",
   cursor: "#c8c8c8",
   cursorAccent: "#1e1e1e",
@@ -54,15 +59,20 @@ export function TerminalView({ paneId, onClosed }: Props) {
       scrollback: 0,
       cursorBlink: true,
       allowProposedApi: true,
+      allowTransparency: !REDUCED_TRANSPARENCY,
       theme: THEME,
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
-    try {
-      term.loadAddon(new WebglAddon());
-    } catch {
-      // Canvas renderer fallback is automatic.
+    if (REDUCED_TRANSPARENCY) {
+      // WebGL renders faster but cannot composite transparency; the DOM
+      // renderer carries the glass look.
+      try {
+        term.loadAddon(new WebglAddon());
+      } catch {
+        // DOM renderer fallback is automatic.
+      }
     }
     fit.fit();
 
@@ -180,7 +190,7 @@ export function TerminalView({ paneId, onClosed }: Props) {
   }
 
   return (
-    <div className="h-full bg-content py-3 pl-4 pr-1">
+    <div className="h-full py-3 pl-4 pr-1">
       <div ref={hostRef} className="term-host h-full w-full select-text" />
     </div>
   );
