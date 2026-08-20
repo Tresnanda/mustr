@@ -5,10 +5,10 @@
 import { useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Dialog from "@radix-ui/react-dialog";
-import { PencilSimple, Plus, X } from "@phosphor-icons/react";
+import { Plus, X } from "@phosphor-icons/react";
 import { closeTab, renameTab, type TabInfo } from "../../bridge/herdr";
 import { useMustr } from "../../state/store";
-import { MENU_CONTENT, MENU_ITEM, MENU_SEPARATOR, MENU_SHADOW } from "../ui/menu";
+import { MENU_CONTENT, MENU_ITEM, MENU_ITEM_DANGER, MENU_SEPARATOR, MENU_SHADOW } from "../ui/menu";
 import { RenameDialog } from "../ui/RenameDialog";
 import { Tip } from "../ui/Tip";
 
@@ -108,15 +108,13 @@ export function TabStrip() {
                 className={`${MENU_ITEM} text-text-primary`}
                 onSelect={() => setRenaming(tab)}
               >
-                <PencilSimple size={14} className="text-text-secondary" aria-hidden />
                 Rename tab…
               </ContextMenu.Item>
               <ContextMenu.Separator className={MENU_SEPARATOR} />
               <ContextMenu.Item
-                className={`${MENU_ITEM} text-danger`}
+                className={MENU_ITEM_DANGER}
                 onSelect={() => setClosing(tab)}
               >
-                <X size={14} aria-hidden />
                 Close tab
               </ContextMenu.Item>
             </ContextMenu.Content>

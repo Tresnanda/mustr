@@ -5,11 +5,10 @@
 import { useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Columns, Rows, X } from "@phosphor-icons/react";
 import { closePane, focusPane, splitPane } from "../../bridge/herdr";
 import { useMustr } from "../../state/store";
 import { paneDisplayName } from "../../lib/names";
-import { MENU_CONTENT, MENU_ITEM as ITEM, MENU_SEPARATOR, MENU_SHADOW } from "../ui/menu";
+import { MENU_CONTENT, MENU_ITEM as ITEM, MENU_ITEM_DANGER, MENU_SEPARATOR, MENU_SHADOW } from "../ui/menu";
 
 export function PaneMenu({ paneId, children }: { paneId: string; children: React.ReactNode }) {
   const { refresh, selectPane, panes } = useMustr();
@@ -33,19 +32,16 @@ export function PaneMenu({ paneId, children }: { paneId: string; children: React
             style={MENU_SHADOW}
           >
             <ContextMenu.Item className={`${ITEM} text-text-primary`} onSelect={() => void split("right")}>
-              <Columns size={14} className="text-text-secondary" aria-hidden />
               Split right
             </ContextMenu.Item>
             <ContextMenu.Item className={`${ITEM} text-text-primary`} onSelect={() => void split("down")}>
-              <Rows size={14} className="text-text-secondary" aria-hidden />
               Split down
             </ContextMenu.Item>
             <ContextMenu.Separator className={MENU_SEPARATOR} />
             <ContextMenu.Item
-              className={`${ITEM} text-danger`}
+              className={MENU_ITEM_DANGER}
               onSelect={() => setConfirmClose(true)}
             >
-              <X size={14} aria-hidden />
               Close terminal
             </ContextMenu.Item>
           </ContextMenu.Content>

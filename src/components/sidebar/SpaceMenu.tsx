@@ -4,10 +4,9 @@
 import { useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Plus, PencilSimple, X } from "@phosphor-icons/react";
 import { closeWorkspace, createTab, renameWorkspace, type WorkspaceInfo } from "../../bridge/herdr";
 import { useMustr } from "../../state/store";
-import { MENU_CONTENT, MENU_ITEM, MENU_SEPARATOR, MENU_SHADOW } from "../ui/menu";
+import { MENU_CONTENT, MENU_ITEM, MENU_ITEM_DANGER, MENU_SEPARATOR, MENU_SHADOW } from "../ui/menu";
 import { RenameDialog } from "../ui/RenameDialog";
 
 export function SpaceMenu({
@@ -38,22 +37,19 @@ export function SpaceMenu({
                 });
               }}
             >
-              <Plus size={14} className="text-text-secondary" aria-hidden />
               New tab in {workspace.label}
             </ContextMenu.Item>
             <ContextMenu.Item
               className={`${MENU_ITEM} text-text-primary`}
               onSelect={() => setRenaming(true)}
             >
-              <PencilSimple size={14} className="text-text-secondary" aria-hidden />
               Rename space…
             </ContextMenu.Item>
             <ContextMenu.Separator className={MENU_SEPARATOR} />
             <ContextMenu.Item
-              className={`${MENU_ITEM} text-danger`}
+              className={MENU_ITEM_DANGER}
               onSelect={() => setClosing(true)}
             >
-              <X size={14} aria-hidden />
               Close space
             </ContextMenu.Item>
           </ContextMenu.Content>
