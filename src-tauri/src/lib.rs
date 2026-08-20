@@ -10,6 +10,7 @@ use serde_json::Value;
 use tauri::ipc::Channel;
 use tauri::State;
 
+use herdr::servers::ServerRow;
 use herdr::term::{Attachment, TermEvent};
 
 /// Live pane attachments, keyed by frontend-chosen attach id.
@@ -21,6 +22,33 @@ struct Attachments(Mutex<HashMap<String, Arc<Attachment>>>);
 #[tauri::command]
 fn api_request(method: String, params: Option<Value>) -> Result<Value, String> {
     herdr::api::request(None, &method, params.unwrap_or_else(|| serde_json::json!({})))
+}
+
+#[tauri::command]
+fn servers_list() -> Vec<ServerRow> {
+    herdr::servers::list()
+}
+
+#[tauri::command]
+fn server_add(name: String, host: String) -> Result<Vec<ServerRow>, String> {
+    herdr::servers::add(name, host)
+}
+
+#[tauri::command]
+fn server_remove(id: String) -> Result<Vec<ServerRow>, String> {
+    herdr::servers::remove(&id)
+}
+
+/// Blocking is fine: non-async commands run off the main thread, and the
+/// frontend shows a connecting state meanwhile.
+#[tauri::command]
+fn server_connect(id: String) -> Result<String, String> {
+    if id == "local" {
+        herdr::servers::switch_to_local()?;
+    } else {
+        herdr::servers::connect_remote(&id)?;
+    }
+    Ok(herdr::servers::active_id())
 }
 
 #[tauri::command]
@@ -96,6 +124,11 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            // Establish the local server (auto-spawning herdr if needed)
+            // before the event loop starts hammering a dead socket.
+            std::thread::spawn(|| {
+                let _ = herdr::servers::switch_to_local();
+            });
             herdr::events::spawn(app.handle().clone());
             #[cfg(target_os = "macos")]
             {
@@ -114,6 +147,10 @@ pub fn run() {
         .manage(Attachments::default())
         .invoke_handler(tauri::generate_handler![
             api_request,
+            servers_list,
+            server_add,
+            server_remove,
+            server_connect,
             attach_pane,
             pane_input,
             pane_resize,

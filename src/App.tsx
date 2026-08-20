@@ -52,7 +52,8 @@ function Toolbar() {
 }
 
 export default function App() {
-  const { selectedPaneId, serverError, refresh, scheduleRefresh, setConnected, tick } = useMustr();
+  const { selectedPaneId, serverError, refresh, scheduleRefresh, setConnected, tick, activeServerId } =
+    useMustr();
 
   useEffect(() => {
     void refresh();
@@ -86,7 +87,7 @@ export default function App() {
         <Sidebar />
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col bg-content">
+      <div key={activeServerId} className="flex min-w-0 flex-1 flex-col bg-content">
         <Toolbar />
         <TabStrip />
         <main className="min-h-0 flex-1">

@@ -9,7 +9,6 @@ use std::time::Duration;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter};
 
-use super::paths;
 
 #[cfg(unix)]
 type Stream = std::os::unix::net::UnixStream;
@@ -47,8 +46,10 @@ pub fn spawn(app: AppHandle) {
 }
 
 fn run_once(app: &AppHandle) -> Result<(), String> {
-    let path = paths::api_socket_path(None).ok_or("no config dir")?;
+    let (path, _) = super::servers::active_paths();
     let mut stream = Stream::connect(&path).map_err(|e| e.to_string())?;
+    // Register so a server switch can shut this stream down and wake us.
+    *super::servers::EVENT_STREAM.lock().unwrap() = stream.try_clone().ok();
 
     let subscriptions: Vec<Value> = TOPICS.iter().map(|t| json!({ "type": t })).collect();
     let req = json!({

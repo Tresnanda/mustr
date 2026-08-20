@@ -17,7 +17,6 @@ use crate::protocol::wire::{
     ClientMessage, RenderEncoding, ServerMessage,
 };
 
-use super::paths;
 
 #[cfg(unix)]
 type Stream = std::os::unix::net::UnixStream;
@@ -52,8 +51,8 @@ impl Attachment {
         rows: u16,
         on_event: impl Fn(TermEvent) + Send + 'static,
     ) -> Result<std::sync::Arc<Self>, String> {
-        let path =
-            paths::client_socket_path(session).ok_or("could not resolve herdr config dir")?;
+        let _ = session;
+        let (_, path) = super::servers::active_paths();
         let mut stream = Stream::connect(&path)
             .map_err(|e| format!("herdr render socket not reachable at {}: {e}", path.display()))?;
 

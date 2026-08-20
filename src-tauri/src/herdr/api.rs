@@ -6,13 +6,12 @@ use std::io::{BufRead, BufReader, Write};
 
 use serde_json::{json, Value};
 
-use super::paths;
 
 #[cfg(unix)]
 type Stream = std::os::unix::net::UnixStream;
 
-fn connect(session: Option<&str>) -> Result<Stream, String> {
-    let path = paths::api_socket_path(session).ok_or("could not resolve herdr config dir")?;
+fn connect(_session: Option<&str>) -> Result<Stream, String> {
+    let (path, _) = super::servers::active_paths();
     Stream::connect(&path).map_err(|e| format!("herdr server not reachable at {}: {e}", path.display()))
 }
 

@@ -21,6 +21,7 @@ import {
   type TabLayout,
   type WorkspaceInfo,
 } from "../bridge/herdr";
+import { connectServer, listServers, type ServerRow } from "../bridge/servers";
 import { notifyStatusChange } from "../bridge/notify";
 import { paneDisplayName } from "../lib/names";
 
@@ -43,6 +44,11 @@ interface MustrState {
   hideQuiet: boolean;
   hasLoaded: boolean;
   now: number;
+  servers: ServerRow[];
+  activeServerId: string;
+  /** Server id currently connecting, for pending UI. */
+  connectingId: string | null;
+  connectError: string | null;
   refresh: () => Promise<void>;
   scheduleRefresh: () => void;
   setConnected: (connected: boolean) => void;
@@ -53,6 +59,8 @@ interface MustrState {
   toggleHideQuiet: () => void;
   newTerminal: () => Promise<void>;
   newSpace: (cwd: string) => Promise<void>;
+  loadServers: () => Promise<void>;
+  switchServer: (id: string) => Promise<void>;
   tick: () => void;
 }
 
@@ -98,6 +106,10 @@ export const useMustr = create<MustrState>((set, get) => ({
   hideQuiet: false,
   hasLoaded: false,
   now: Date.now(),
+  servers: [],
+  activeServerId: "local",
+  connectingId: null,
+  connectError: null,
 
   refresh: async () => {
     try {
@@ -170,6 +182,45 @@ export const useMustr = create<MustrState>((set, get) => ({
   setFilter: (filter) => set({ filter }),
   toggleHideQuiet: () => set((st) => ({ hideQuiet: !st.hideQuiet })),
   tick: () => set({ now: Date.now() }),
+
+  loadServers: async () => {
+    try {
+      const servers = await listServers();
+      const active = servers.find((s) => s.active);
+      set({ servers, activeServerId: active?.id ?? "local" });
+    } catch {
+      // registry unavailable: keep whatever we had
+    }
+  },
+
+  switchServer: async (id) => {
+    if (get().connectingId || id === get().activeServerId) return;
+    set({ connectingId: id, connectError: null });
+    try {
+      await connectServer(id);
+      // New server, new world: drop the mirror and re-seed.
+      lastStatus = new Map();
+      statusSince.clear();
+      set({
+        activeServerId: id,
+        workspaces: [],
+        tabs: [],
+        panes: [],
+        layouts: [],
+        tree: null,
+        selectedTabId: null,
+        selectedPaneId: null,
+        scopeId: null,
+        hasLoaded: false,
+      });
+      await get().refresh();
+      await get().loadServers();
+    } catch (error) {
+      set({ connectError: String(error) });
+    } finally {
+      set({ connectingId: null });
+    }
+  },
 
   newTerminal: async () => {
     const { scopeId, workspaces, panes, selectedPaneId } = get();
