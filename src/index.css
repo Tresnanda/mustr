@@ -1,0 +1,87 @@
+@import "tailwindcss";
+@import "./design/tokens.css";
+@import "@xterm/xterm/css/xterm.css";
+
+@theme {
+  --color-sidebar: var(--surface-sidebar);
+  --color-content: var(--surface-content);
+  --color-hover: var(--surface-hover);
+  --color-active: var(--surface-active);
+  --color-selection: var(--selection);
+  --color-inset: var(--surface-inset);
+  --color-opaque: var(--surface-opaque);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-status-working: var(--status-working);
+  --color-status-blocked: var(--status-blocked);
+  --color-status-blocked-soft: var(--status-blocked-soft);
+  --color-status-done: var(--status-done);
+  --color-status-idle: var(--status-idle);
+  --color-status-unknown: var(--status-unknown);
+  --color-alive: var(--alive);
+  --font-ui: var(--font-ui);
+  --font-mono: var(--font-mono);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-primary);
+  background: transparent;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+  cursor: default;
+}
+
+/* Keyboard focus ring. Lives in @layer base so Tailwind utilities (which sit
+   in the later utilities layer) and inline styles can override it — unlayered
+   rules would beat every utility regardless of specificity. */
+@layer base {
+  :where(:focus-visible) {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
+    border-radius: 6px;
+  }
+}
+
+/* Working-state pulse — the one allowed ambient animation. */
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.status-dot-working {
+  animation: status-pulse 2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .status-dot-working { animation: none; }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* Terminal host: let xterm own its internal layout. Forcing .xterm-screen to
+   100% height stretched the render canvas past its framebuffer, painting the
+   remainder black. The host fills the pane; FitAddon sizes xterm inside it. */
+.term-host {
+  height: 100%;
+  width: 100%;
+}
+.term-host .xterm-viewport {
+  background-color: transparent !important;
+}

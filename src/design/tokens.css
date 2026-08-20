@@ -1,0 +1,54 @@
+/* Mustr design tokens — monochromatic ink (Cursor-family). Pure neutral
+   grays, no warm cast, no accent color. Color is reserved for exactly two
+   signals: blocked (amber) and connection-alive (green dot). Content and
+   terminal share one literal hex so they blend seamlessly. */
+
+:root {
+  color-scheme: dark;
+
+  /* ---- Surfaces (hex literals; terminal theme reuses --surface-content) ---- */
+  --surface-content: rgb(30 30 30 / 0.82);
+  --surface-opaque: #1e1e1e;
+  --surface-sidebar: rgb(40 40 40 / 0.52);
+  --surface-hover: rgb(255 255 255 / 0.05);
+  --surface-active: rgb(255 255 255 / 0.07);
+  --selection: rgb(255 255 255 / 0.08);
+  --surface-inset: #191919;
+
+  /* ---- Hairlines: solid grays ---- */
+  --border-subtle: #303030;
+  --border-strong: #3c3c3c;
+
+  /* ---- Text: ink ramp ---- */
+  --text-primary: #ececec;
+  --text-secondary: #a0a0a0;
+  --text-muted: #6f6f6f;
+
+  /* ---- The only colors in the app ---- */
+  --status-blocked: oklch(0.76 0.11 70);
+  --status-blocked-soft: oklch(0.76 0.11 70 / 0.15);
+  --alive: oklch(0.72 0.11 155);
+
+  /* ---- Ink statuses ---- */
+  --status-working: #b8b8b8;
+  --status-done: #8f8f8f;
+  --status-idle: #6f6f6f;
+  --status-unknown: #565656;
+
+  --focus-ring: rgb(255 255 255 / 0.55);
+
+  --shadow-popover:
+    0 0 0 1px rgb(255 255 255 / 0.07),
+    0 2px 6px rgb(0 0 0 / 0.35),
+    0 14px 36px rgb(0 0 0 / 0.5);
+
+  /* ---- Motion ---- */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+
+  /* ---- Type ---- */
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+}

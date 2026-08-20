@@ -1,0 +1,23 @@
+[package]
+name = "mustr"
+version = "0.1.0"
+description = "Mustr — a native desktop client for herdr"
+authors = ["Treshnanda <treshnanda@gmail.com>"]
+edition = "2021"
+
+[lib]
+name = "mustr_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+bincode = { version = "2", features = ["serde"] }
+base64 = "0.22"
+tauri-plugin-notification = "2.3.3"
+tauri-plugin-dialog = "2.7.2"
