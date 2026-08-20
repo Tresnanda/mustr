@@ -8,6 +8,8 @@ import { dragHandlers } from "./components/DragRegion";
 import { TipProvider } from "./components/ui/Tip";
 import { statusSince, useMustr } from "./state/store";
 import { lastNotified } from "./bridge/notify";
+import { connectServer } from "./bridge/servers";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { paneDisplayName } from "./lib/names";
 import { relativeAge } from "./lib/time";
 
@@ -52,8 +54,17 @@ function Toolbar() {
 }
 
 export default function App() {
-  const { selectedPaneId, serverError, refresh, scheduleRefresh, setConnected, tick, activeServerId } =
-    useMustr();
+  const {
+    selectedPaneId,
+    selectedTabId,
+    visitedTabs,
+    serverError,
+    refresh,
+    scheduleRefresh,
+    setConnected,
+    tick,
+    activeServerId,
+  } = useMustr();
 
   useEffect(() => {
     void refresh();
@@ -90,21 +101,57 @@ export default function App() {
       <div key={activeServerId} className="flex min-w-0 flex-1 flex-col bg-content">
         <Toolbar />
         <TabStrip />
-        <main className="min-h-0 flex-1">
-          {/* Pane/tab switching is high-frequency: instant, no transition. */}
+        <main className="relative min-h-0 flex-1">
+          {/* Recently visited tabs stay mounted (hidden) so their pane
+              connections and buffers are warm — switching is instant even
+              over an SSH tunnel. */}
           {selectedPaneId ? (
-            <PaneGrid />
+            visitedTabs.map((tid) => (
+              <div key={tid} className={tid === selectedTabId ? "h-full" : "hidden"}>
+                <PaneGrid tabId={tid} />
+              </div>
+            ))
           ) : (
             <div className="flex h-full items-center justify-center">
               <div className="max-w-sm text-center">
-                <p className="text-[13px] font-semibold text-text-primary">
-                  {serverError ? "Can't reach the herdr server" : "No pane selected"}
-                </p>
-                <p className="mt-1 text-[13px] leading-snug text-text-secondary">
-                  {serverError
-                    ? "Start it by running herdr in a terminal. Mustr reconnects automatically."
-                    : "Choose an agent or terminal in the sidebar."}
-                </p>
+                {serverError?.includes("herdr-not-installed") ? (
+                  <>
+                    <p className="text-[13px] font-semibold text-text-primary">
+                      Herdr isn't installed
+                    </p>
+                    <p className="mt-1 text-[13px] leading-snug text-text-secondary">
+                      Mustr drives the herdr runtime. Install it, then Mustr connects
+                      on its own.
+                    </p>
+                    <div className="mt-4 flex justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void openUrl("https://herdr.dev")}
+                        className="rounded-lg bg-selection px-3 py-1.5 text-[13px] font-medium text-text-primary transition-colors duration-100 hover:bg-active active:scale-[0.97]"
+                      >
+                        Get herdr
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void connectServer("local").then(refresh)}
+                        className="rounded-lg px-3 py-1.5 text-[13px] text-text-primary transition-colors duration-100 hover:bg-hover active:scale-[0.97]"
+                      >
+                        Check again
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[13px] font-semibold text-text-primary">
+                      {serverError ? "Can't reach the herdr server" : "No pane selected"}
+                    </p>
+                    <p className="mt-1 text-[13px] leading-snug text-text-secondary">
+                      {serverError
+                        ? "Start it by running herdr in a terminal. Mustr reconnects automatically."
+                        : "Choose an agent or terminal in the sidebar."}
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           )}

@@ -134,6 +134,7 @@ pub fn run() {
             std::thread::spawn(|| {
                 let _ = herdr::servers::switch_to_local();
             });
+            herdr::servers::spawn_supervisor(app.handle().clone());
             herdr::events::spawn(app.handle().clone());
             #[cfg(target_os = "macos")]
             {

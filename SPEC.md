@@ -347,7 +347,7 @@ spring-pop:     { type: "spring", duration: 0.3, bounce: 0.15 }  /* blocked-badg
 | --- | --- | --- |
 | M0 ✅ | **Walking skeleton** | Tauri app connects to local herdr, one xterm.js pane attached via `TerminalAnsi`, typing round-trips. Riskiest plumbing proven. |
 | M1 ✅ | **Mission control** | Sidebar + tabs + BSP grid live from JSON API events; focus/split/close/zoom; native notifications on `blocked`/`done`. |
-| M2 | **Servers** | Local lifecycle management (detect/spawn/install), quickies with SSH tunneling, reconnect supervision. |
+| M2 ✅ | **Servers** | Local lifecycle management (detect/spawn/install), quickies with SSH tunneling, reconnect supervision. |
 | M3 | **Parity** | Worktrees, plugins, sessions, settings, ⌘K palette, keybinding remap, drag interactions (resize/reorder/swap). |
 | M4 | **Polish & ship** | Design QA gates green, updater wired, docs/README, first public release (macOS), Windows build following. |
 

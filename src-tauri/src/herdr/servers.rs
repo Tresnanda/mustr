@@ -13,6 +13,8 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
+use serde_json::json;
+use tauri::Emitter;
 
 use super::paths;
 
@@ -314,4 +316,41 @@ pub fn ssh_aliases() -> Vec<String> {
         }
     }
     out
+}
+
+/// Watches the active SSH tunnel; when the ssh child dies (network drop,
+/// laptop sleep), reports disconnected and retries the same remote once per
+/// tick until it comes back.
+pub fn spawn_supervisor(app: tauri::AppHandle) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_secs(5));
+        let dead_remote = {
+            let mut guard = ACTIVE.lock().unwrap();
+            match guard.as_mut() {
+                Some(active) => match active.tunnel.as_mut() {
+                    Some(tunnel) => match tunnel.try_wait() {
+                        Ok(Some(_)) => Some(active.server_id.clone()),
+                        _ => None,
+                    },
+                    None => None,
+                },
+                None => None,
+            }
+        };
+        if let Some(id) = dead_remote {
+            let _ = app.emit("herdr-conn", json!({ "connected": false }));
+            let _ = app.emit("herdr-tunnel", json!({ "status": "reconnecting", "id": id }));
+            match connect_remote(&id) {
+                Ok(()) => {
+                    let _ = app.emit("herdr-tunnel", json!({ "status": "restored", "id": id }));
+                }
+                Err(err) => {
+                    let _ = app.emit(
+                        "herdr-tunnel",
+                        json!({ "status": "down", "id": id, "error": err }),
+                    );
+                }
+            }
+        }
+    });
 }

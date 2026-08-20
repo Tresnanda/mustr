@@ -35,8 +35,10 @@ interface MustrState {
   tabs: TabInfo[];
   panes: PaneInfo[];
   layouts: TabLayout[];
-  /** BSP tree of the selected tab. */
-  tree: LayoutNode | null;
+  /** BSP trees per tab (cache; selected tab kept fresh). */
+  trees: Record<string, LayoutNode>;
+  /** Recently viewed tabs, kept mounted for instant switching (LRU). */
+  visitedTabs: string[];
   selectedTabId: string | null;
   selectedPaneId: string | null;
   scopeId: string | null;
@@ -62,6 +64,13 @@ interface MustrState {
   loadServers: () => Promise<void>;
   switchServer: (id: string) => Promise<void>;
   tick: () => void;
+}
+
+const WARM_TABS = 4;
+
+function touchVisited(visited: string[], tabId: string | null): string[] {
+  if (!tabId) return visited;
+  return [tabId, ...visited.filter((t) => t !== tabId)].slice(0, WARM_TABS);
 }
 
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -98,7 +107,8 @@ export const useMustr = create<MustrState>((set, get) => ({
   tabs: [],
   panes: [],
   layouts: [],
-  tree: null,
+  trees: {},
+  visitedTabs: [],
   selectedTabId: null,
   selectedPaneId: null,
   scopeId: null,
@@ -130,18 +140,20 @@ export const useMustr = create<MustrState>((set, get) => ({
       }
 
       const tree = await fetchTree(selectedTabId);
-      set({
+      set((st) => ({
         server,
         workspaces: snapshot.workspaces,
         tabs: snapshot.tabs,
         panes: snapshot.panes,
         layouts: snapshot.layouts,
-        tree,
+        trees:
+          tree && selectedTabId ? { ...st.trees, [selectedTabId]: tree } : st.trees,
+        visitedTabs: touchVisited(st.visitedTabs, selectedTabId),
         selectedTabId,
         selectedPaneId,
         serverError: null,
         hasLoaded: true,
-      });
+      }));
     } catch (error) {
       set({ server: null, serverError: String(error) });
     }
@@ -163,19 +175,30 @@ export const useMustr = create<MustrState>((set, get) => ({
   selectPane: (paneId) => {
     const pane = get().panes.find((p) => p.pane_id === paneId);
     if (!pane) return;
-    const tabChanged = pane.tab_id !== get().selectedTabId;
-    set({ selectedPaneId: paneId, selectedTabId: pane.tab_id });
+    set((st) => ({
+      selectedPaneId: paneId,
+      selectedTabId: pane.tab_id,
+      visitedTabs: touchVisited(st.visitedTabs, pane.tab_id),
+    }));
     void focusPane(paneId).catch(() => {});
-    if (tabChanged) void fetchTree(pane.tab_id).then((tree) => set({ tree }));
+    void fetchTree(pane.tab_id).then((tree) => {
+      if (tree) set((st) => ({ trees: { ...st.trees, [pane.tab_id]: tree } }));
+    });
   },
 
   selectTab: (tabId) => {
     const layout = get().layouts.find((l) => l.tab_id === tabId);
     const fallback = get().panes.find((p) => p.tab_id === tabId);
     const paneId = layout?.focused_pane_id ?? fallback?.pane_id ?? null;
-    set({ selectedTabId: tabId, selectedPaneId: paneId });
+    set((st) => ({
+      selectedTabId: tabId,
+      selectedPaneId: paneId,
+      visitedTabs: touchVisited(st.visitedTabs, tabId),
+    }));
     void focusTab(tabId).catch(() => {});
-    void fetchTree(tabId).then((tree) => set({ tree }));
+    void fetchTree(tabId).then((tree) => {
+      if (tree) set((st) => ({ trees: { ...st.trees, [tabId]: tree } }));
+    });
   },
 
   setScope: (workspaceId) => set({ scopeId: workspaceId }),
@@ -207,7 +230,8 @@ export const useMustr = create<MustrState>((set, get) => ({
         tabs: [],
         panes: [],
         layouts: [],
-        tree: null,
+        trees: {},
+        visitedTabs: [],
         selectedTabId: null,
         selectedPaneId: null,
         scopeId: null,

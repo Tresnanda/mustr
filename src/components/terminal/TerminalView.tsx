@@ -55,7 +55,7 @@ export function TerminalView({ paneId, onClosed }: Props) {
     const term = new Terminal({
       fontFamily: "SF Mono, ui-monospace, Menlo, monospace",
       fontSize: 13,
-      lineHeight: 1.3,
+      lineHeight: 1.0,
       scrollback: 0,
       cursorBlink: true,
       allowProposedApi: true,
@@ -65,6 +65,9 @@ export function TerminalView({ paneId, onClosed }: Props) {
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
+    const fitSafely = () => {
+      if (host.clientWidth > 0 && host.clientHeight > 0) fit.fit();
+    };
     if (REDUCED_TRANSPARENCY) {
       // WebGL renders faster but cannot composite transparency; the DOM
       // renderer carries the glass look.
@@ -74,7 +77,7 @@ export function TerminalView({ paneId, onClosed }: Props) {
         // DOM renderer fallback is automatic.
       }
     }
-    fit.fit();
+    fitSafely();
 
     term.onData((data) => {
       paneInput(attachId, new TextEncoder().encode(data)).catch(() => {});
@@ -124,7 +127,7 @@ export function TerminalView({ paneId, onClosed }: Props) {
     host.addEventListener("wheel", onWheel, { passive: false, capture: true });
 
     const observer = new ResizeObserver(() => {
-      if (disposed) return;
+      if (disposed || host.clientWidth === 0 || host.clientHeight === 0) return;
       fit.fit();
       paneResize(attachId, term.cols, term.rows).catch(() => {});
     });
