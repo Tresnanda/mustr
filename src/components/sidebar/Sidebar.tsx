@@ -3,11 +3,12 @@
 // not enumerated globally: they nest under a space when that space is scoped,
 // like herdr itself. Selection is instant — no traveling indicator.
 
-import React, { useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion, Reorder } from "motion/react";
 import { Folder, FolderPlus, Folders, FunnelSimple, MagnifyingGlass, Plus } from "@phosphor-icons/react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { statusSince, useMustr } from "../../state/store";
+import { moveWorkspace } from "../../bridge/herdr";
 import type { AgentStatus, PaneInfo } from "../../bridge/herdr";
 import { StatusIcon, STATUS_LABEL } from "../status";
 import { cwdFolder, paneDetail, paneDisplayName } from "../../lib/names";
@@ -175,6 +176,18 @@ export function Sidebar() {
 
   const selectPane = useMustr((s) => s.selectPane);
   const git = useMustr((s) => s.git);
+  const refresh = useMustr((s) => s.refresh);
+
+  // Local visual order for drag-reorder; resynced when not dragging.
+  const [spaceOrder, setSpaceOrder] = useState<string[]>([]);
+  const draggingSpace = useRef(false);
+  const serverSpaceIds = workspaces.map((w) => w.workspace_id).join(",");
+  useEffect(() => {
+    if (!draggingSpace.current) setSpaceOrder(serverSpaceIds ? serverSpaceIds.split(",") : []);
+  }, [serverSpaceIds]);
+  const orderedSpaces = spaceOrder
+    .map((id) => workspaces.find((w) => w.workspace_id === id))
+    .filter(Boolean) as typeof workspaces;
   const hideQuiet = useMustr((s) => s.hideQuiet);
   const toggleHideQuiet = useMustr((s) => s.toggleHideQuiet);
   const newSpace = useMustr((s) => s.newSpace);
@@ -257,7 +270,8 @@ export function Sidebar() {
           <span className="min-w-0 flex-1 truncate text-[13px] text-text-primary">All Spaces</span>
           <span className="text-[12px] tabular-nums text-text-muted">{workspaces.length}</span>
         </Row>
-        {workspaces.map((ws) => {
+        <Reorder.Group axis="y" values={spaceOrder} onReorder={setSpaceOrder} as="div">
+        {orderedSpaces.map((ws) => {
           const terminals = nestedTerminals(ws.workspace_id);
           const seen = new Map<string, number>();
           const totals = new Map<string, number>();
@@ -266,7 +280,21 @@ export function Sidebar() {
             totals.set(k, (totals.get(k) ?? 0) + 1);
           }
           return (
-            <div key={ws.workspace_id}>
+            <Reorder.Item
+              key={ws.workspace_id}
+              value={ws.workspace_id}
+              as="div"
+              transition={{ type: "spring", duration: 0.3, bounce: 0 }}
+              whileDrag={{ scale: 1.02, zIndex: 10 }}
+              onDragStart={() => {
+                draggingSpace.current = true;
+              }}
+              onDragEnd={() => {
+                draggingSpace.current = false;
+                const target = spaceOrder.indexOf(ws.workspace_id);
+                if (target >= 0) void moveWorkspace(ws.workspace_id, target).then(refresh);
+              }}
+            >
               <SpaceMenu workspace={ws}>
               {(() => {
                 const cwd = panes.find((p) => p.workspace_id === ws.workspace_id)?.cwd;
@@ -321,10 +349,10 @@ export function Sidebar() {
                   </Row>
                 );
               })}
-            </div>
+            </Reorder.Item>
           );
         })}
-
+        </Reorder.Group>
         </div>
 
         {AGENT_GROUPS.map((status) => {

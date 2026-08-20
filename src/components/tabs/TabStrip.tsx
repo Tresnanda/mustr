@@ -2,11 +2,12 @@
 // single tab (chrome earns its place). Closing a tab ends real processes,
 // so it always confirms — through a Radix dialog, consequence-first.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Reorder } from "motion/react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Plus } from "@phosphor-icons/react";
-import { closeTab, renameTab, type TabInfo } from "../../bridge/herdr";
+import { closeTab, moveTab, renameTab, type TabInfo } from "../../bridge/herdr";
 import { closeAutoFocus } from "../../lib/modality";
 import { useMustr } from "../../state/store";
 import { MENU_CONTENT, MENU_ITEM, MENU_ITEM_DANGER, MENU_SEPARATOR, MENU_SHADOW, DIALOG_CONTENT, DIALOG_OVERLAY } from "../ui/menu";
@@ -68,20 +69,51 @@ export function TabStrip() {
 
   const pane = panes.find((p) => p.pane_id === selectedPaneId);
   const workspaceTabs = tabs.filter((t) => t.workspace_id === pane?.workspace_id);
+
+  // Local visual order while dragging; resynced from the server otherwise.
+  const [order, setOrder] = useState<string[]>([]);
+  const dragging = useRef(false);
+  const serverIds = workspaceTabs.map((t) => t.tab_id).join(",");
+  useEffect(() => {
+    if (!dragging.current) setOrder(serverIds ? serverIds.split(",") : []);
+  }, [serverIds]);
+
   if (workspaceTabs.length === 0) return null;
+  const byId = new Map(workspaceTabs.map((t) => [t.tab_id, t]));
+  const orderedTabs = order.map((id) => byId.get(id)).filter(Boolean) as TabInfo[];
 
   return (
-    <div
+    <Reorder.Group
+      axis="x"
+      values={order}
+      onReorder={setOrder}
       className="flex h-[34px] shrink-0 items-center gap-0.5 overflow-x-auto px-4"
       role="tablist"
       aria-label="Tabs"
+      as="div"
     >
-      {workspaceTabs.map((tab) => {
+      {orderedTabs.map((tab) => {
         const active = tab.tab_id === selectedTabId;
         const busy = tab.agent_status === "working";
         const blocked = tab.agent_status === "blocked";
         return (
-          <ContextMenu.Root key={tab.tab_id}>
+          <Reorder.Item
+            key={tab.tab_id}
+            value={tab.tab_id}
+            as="div"
+            className="shrink-0"
+            transition={{ type: "spring", duration: 0.3, bounce: 0 }}
+            whileDrag={{ scale: 1.06, zIndex: 10 }}
+            onDragStart={() => {
+              dragging.current = true;
+            }}
+            onDragEnd={() => {
+              dragging.current = false;
+              const target = order.indexOf(tab.tab_id);
+              if (target >= 0) void moveTab(tab.tab_id, target).then(refresh);
+            }}
+          >
+          <ContextMenu.Root>
           <ContextMenu.Trigger asChild>
             <button
               type="button"
@@ -124,6 +156,7 @@ export function TabStrip() {
             </ContextMenu.Content>
           </ContextMenu.Portal>
           </ContextMenu.Root>
+          </Reorder.Item>
         );
       })}
       <Tip label="New tab">
@@ -149,6 +182,7 @@ export function TabStrip() {
           onRename={(label) => void renameTab(renaming.tab_id, label).then(refresh)}
         />
       )}
-    </div>
+    </Reorder.Group>
   );
 }
+
