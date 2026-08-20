@@ -46,6 +46,10 @@ interface MustrState {
   hideQuiet: boolean;
   hasLoaded: boolean;
   now: number;
+  termFontSize: number;
+  findOpen: boolean;
+  setTermFontSize: (px: number) => void;
+  setFindOpen: (open: boolean) => void;
   servers: ServerRow[];
   activeServerId: string;
   /** Server id currently connecting, for pending UI. */
@@ -116,6 +120,14 @@ export const useMustr = create<MustrState>((set, get) => ({
   hideQuiet: false,
   hasLoaded: false,
   now: Date.now(),
+  termFontSize: Number(localStorage.getItem("mustr:termFontSize")) || 13,
+  findOpen: false,
+  setTermFontSize: (px) => {
+    const clamped = Math.min(22, Math.max(10, px));
+    localStorage.setItem("mustr:termFontSize", String(clamped));
+    set({ termFontSize: clamped });
+  },
+  setFindOpen: (findOpen) => set({ findOpen }),
   servers: [],
   activeServerId: "local",
   connectingId: null,

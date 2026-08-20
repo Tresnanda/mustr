@@ -7,9 +7,11 @@ import { TabStrip } from "./components/tabs/TabStrip";
 import { dragHandlers } from "./components/DragRegion";
 import { TipProvider } from "./components/ui/Tip";
 import { Navigator } from "./components/command/Navigator";
+import { ClosePaneDialog } from "./components/panes/ClosePaneDialog";
 import { statusSince, useMustr } from "./state/store";
 import { lastNotified } from "./bridge/notify";
 import { connectServer } from "./bridge/servers";
+import { splitPane, zoomPane, focusPane } from "./bridge/herdr";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { paneDisplayName } from "./lib/names";
 import { relativeAge } from "./lib/time";
@@ -56,6 +58,7 @@ function Toolbar() {
 
 export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [closingPaneId, setClosingPaneId] = useState<string | null>(null);
   const {
     selectedPaneId,
     selectedTabId,
@@ -84,20 +87,103 @@ export default function App() {
       }
     };
     window.addEventListener("focus", onActivate);
-    // ⌘K anywhere — capture phase so focused terminals can't swallow it.
-    const onPalette = (e: KeyboardEvent) => {
-      if (e.metaKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
+    // App shortcuts — capture phase so focused terminals can't swallow
+    // them; everything else flows through to the pane untouched.
+    const onShortcut = (e: KeyboardEvent) => {
+      if (!e.metaKey || e.altKey || e.ctrlKey) return;
+      const st = useMustr.getState();
+      const key = e.key.toLowerCase();
+      const eat = () => {
         e.preventDefault();
         e.stopPropagation();
+      };
+
+      if (!e.shiftKey && key === "k") {
+        eat();
         setPaletteOpen((v) => !v);
+        return;
+      }
+      if (!e.shiftKey && key === "t") {
+        eat();
+        void st.newTerminal();
+        return;
+      }
+      if (!e.shiftKey && key === "f" && st.selectedPaneId) {
+        eat();
+        st.setFindOpen(true);
+        return;
+      }
+      if (!e.shiftKey && (key === "=" || key === "+")) {
+        eat();
+        st.setTermFontSize(st.termFontSize + 1);
+        return;
+      }
+      if (!e.shiftKey && key === "-") {
+        eat();
+        st.setTermFontSize(st.termFontSize - 1);
+        return;
+      }
+      if (!e.shiftKey && key === "0") {
+        eat();
+        st.setTermFontSize(13);
+        return;
+      }
+      if (!e.shiftKey && key === "d" && st.selectedPaneId) {
+        eat();
+        const paneId = st.selectedPaneId;
+        void focusPane(paneId)
+          .then(() => splitPane(paneId, "right"))
+          .then(st.refresh);
+        return;
+      }
+      if (e.shiftKey && key === "d" && st.selectedPaneId) {
+        eat();
+        const paneId = st.selectedPaneId;
+        void focusPane(paneId)
+          .then(() => splitPane(paneId, "down"))
+          .then(st.refresh);
+        return;
+      }
+      if (e.shiftKey && key === "z" && st.selectedPaneId) {
+        eat();
+        const paneId = st.selectedPaneId;
+        void focusPane(paneId)
+          .then(() => zoomPane(paneId))
+          .then(st.refresh);
+        return;
+      }
+      if (!e.shiftKey && key === "w" && st.selectedPaneId) {
+        eat();
+        setClosingPaneId(st.selectedPaneId);
+        return;
+      }
+      // Tab navigation within the current workspace.
+      const pane = st.panes.find((p) => p.pane_id === st.selectedPaneId);
+      const workspaceTabs = st.tabs.filter((t) => t.workspace_id === pane?.workspace_id);
+      if (!e.shiftKey && /^[1-9]$/.test(key) && workspaceTabs.length > 0) {
+        const idx = Number(key) - 1;
+        if (workspaceTabs[idx]) {
+          eat();
+          st.selectTab(workspaceTabs[idx].tab_id);
+        }
+        return;
+      }
+      if (e.shiftKey && (e.key === "}" || e.key === "{") && workspaceTabs.length > 1) {
+        eat();
+        const cur = workspaceTabs.findIndex((t) => t.tab_id === st.selectedTabId);
+        const next =
+          e.key === "}"
+            ? (cur + 1) % workspaceTabs.length
+            : (cur - 1 + workspaceTabs.length) % workspaceTabs.length;
+        st.selectTab(workspaceTabs[next].tab_id);
       }
     };
-    window.addEventListener("keydown", onPalette, true);
+    window.addEventListener("keydown", onShortcut, true);
     return () => {
       clearInterval(fallback);
       clearInterval(clock);
       window.removeEventListener("focus", onActivate);
-      window.removeEventListener("keydown", onPalette, true);
+      window.removeEventListener("keydown", onShortcut, true);
       unlistenEvent.then((fn) => fn());
       unlistenConn.then((fn) => fn());
     };
@@ -171,6 +257,7 @@ export default function App() {
       </div>
     </div>
     <Navigator open={paletteOpen} onOpenChange={setPaletteOpen} />
+    <ClosePaneDialog paneId={closingPaneId} onOpenChange={(o) => !o && setClosingPaneId(null)} />
     </TipProvider>
   );
 }

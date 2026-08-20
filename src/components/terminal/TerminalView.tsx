@@ -7,7 +7,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { useMustr } from "../../state/store";
 import {
   attachPane,
   decodeBase64,
@@ -42,7 +44,29 @@ interface Props {
 
 export function TerminalView({ paneId, onClosed }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<Terminal | null>(null);
+  const fitRef = useRef<FitAddon | null>(null);
+  const searchRef = useRef<SearchAddon | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const fontSize = useMustr((s) => s.termFontSize);
+  const findOpen = useMustr((s) => s.findOpen);
+  const setFindOpen = useMustr((s) => s.setFindOpen);
+  const isFocusedPane = useMustr((s) => s.selectedPaneId === paneId);
+  const [findQuery, setFindQuery] = useState("");
+
+  // Live font size: applies to the running terminal, then refits.
+  useEffect(() => {
+    const term = termRef.current;
+    const host = hostRef.current;
+    if (!term || !host) return;
+    term.options.fontSize = fontSize;
+    if (host.clientWidth > 0 && host.clientHeight > 0) fitRef.current?.fit();
+  }, [fontSize]);
+
+  useEffect(() => {
+    if (findOpen && isFocusedPane) return;
+    searchRef.current?.clearDecorations();
+  }, [findOpen, isFocusedPane]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -54,7 +78,7 @@ export function TerminalView({ paneId, onClosed }: Props) {
 
     const term = new Terminal({
       fontFamily: "SF Mono, ui-monospace, Menlo, monospace",
-      fontSize: 13,
+      fontSize: useMustr.getState().termFontSize,
       lineHeight: 1.0,
       scrollback: 0,
       cursorBlink: true,
@@ -64,6 +88,11 @@ export function TerminalView({ paneId, onClosed }: Props) {
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
+    const search = new SearchAddon();
+    term.loadAddon(search);
+    termRef.current = term;
+    fitRef.current = fit;
+    searchRef.current = search;
     term.open(host);
     const fitSafely = () => {
       if (host.clientWidth > 0 && host.clientHeight > 0) fit.fit();
@@ -177,6 +206,9 @@ export function TerminalView({ paneId, onClosed }: Props) {
       observer.disconnect();
       host.removeEventListener("wheel", onWheel, { capture: true });
       detachPane(attachId).catch(() => {});
+      termRef.current = null;
+      fitRef.current = null;
+      searchRef.current = null;
       term.dispose();
     };
   }, [paneId, onClosed]);
@@ -192,8 +224,42 @@ export function TerminalView({ paneId, onClosed }: Props) {
     );
   }
 
+  const runFind = (backwards: boolean) => {
+    const search = searchRef.current;
+    if (!search || !findQuery) return;
+    const opts = { decorations: { matchOverviewRuler: "#6f6f6f", activeMatchColorOverviewRuler: "#ececec" } };
+    if (backwards) search.findPrevious(findQuery, opts);
+    else search.findNext(findQuery, opts);
+  };
+
   return (
-    <div className="h-full py-3 pl-4 pr-1">
+    <div className="relative h-full py-3 pl-4 pr-1">
+      {findOpen && isFocusedPane && (
+        <div
+          className="absolute right-3 top-3 z-10 flex h-8 items-center gap-2 rounded-lg bg-[rgb(44_44_44/0.95)] px-2.5 backdrop-blur-xl"
+          style={{ boxShadow: "0 0 0 0.5px rgb(255 255 255 / 0.1), 0 6px 20px rgb(0 0 0 / 0.35)" }}
+        >
+          <input
+            autoFocus
+            value={findQuery}
+            onChange={(e) => {
+              setFindQuery(e.target.value);
+              searchRef.current?.findNext(e.target.value, { incremental: true });
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") runFind(e.shiftKey);
+              else if (e.key === "Escape") {
+                setFindOpen(false);
+                termRef.current?.focus();
+              }
+            }}
+            placeholder="Find in terminal"
+            aria-label="Find in terminal"
+            style={{ outline: "none" }}
+            className="w-44 bg-transparent text-[12.5px] text-text-primary placeholder:text-text-muted"
+          />
+        </div>
+      )}
       <div ref={hostRef} className="term-host h-full w-full select-text" />
     </div>
   );
