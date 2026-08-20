@@ -1,8 +1,11 @@
 // Settings — essentials only, labels describe the ON state, everything
 // applies immediately (no Save button to babysit).
 
+import { useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Minus, Plus } from "@phosphor-icons/react";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { listPlugins } from "../../bridge/herdr";
 import { useMustr } from "../../state/store";
 import { DIALOG_CONTENT, DIALOG_OVERLAY, MENU_SHADOW } from "../ui/menu";
 
@@ -53,6 +56,11 @@ export function SettingsDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const [plugins, setPlugins] = useState<{ id?: string; name?: string; enabled?: boolean }[]>([]);
+  useEffect(() => {
+    if (open) void listPlugins().then((r) => setPlugins(r.plugins ?? [])).catch(() => setPlugins([]));
+  }, [open]);
+
   const {
     termFontSize,
     setTermFontSize,
@@ -126,6 +134,35 @@ export function SettingsDialog({
               on={appearance === "glass"}
               onChange={(on) => setAppearance(on ? "glass" : "solid")}
             />
+          </div>
+
+          <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted">
+            Herdr plugins
+          </p>
+          <div className="mt-1.5">
+            {plugins.length === 0 ? (
+              <p className="px-1 text-[12.5px] leading-snug text-text-secondary">
+                No plugins installed on this server.
+              </p>
+            ) : (
+              plugins.map((plugin, i) => (
+                <div key={plugin.id ?? i} className="flex items-center gap-3 px-1 py-1.5">
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-text-primary">
+                    {plugin.name ?? plugin.id}
+                  </span>
+                  <span className="text-[11.5px] text-text-muted">
+                    {plugin.enabled === false ? "Disabled" : "Enabled"}
+                  </span>
+                </div>
+              ))
+            )}
+            <button
+              type="button"
+              onClick={() => void openUrl("https://herdr.dev/plugins/")}
+              className="mt-1 rounded-md px-1 text-[12.5px] text-text-secondary underline decoration-[rgb(255_255_255/0.2)] underline-offset-2 transition-colors duration-100 hover:text-text-primary"
+            >
+              Browse the plugin marketplace
+            </button>
           </div>
         </Dialog.Content>
       </Dialog.Portal>

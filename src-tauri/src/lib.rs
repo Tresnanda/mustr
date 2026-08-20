@@ -55,6 +55,8 @@ fn server_remove(id: String) -> Result<Vec<ServerRow>, String> {
 fn server_connect(id: String) -> Result<String, String> {
     if id == "local" {
         herdr::servers::switch_to_local()?;
+    } else if let Some(session) = id.strip_prefix("local:") {
+        herdr::servers::switch_to_local_session(Some(session))?;
     } else {
         herdr::servers::connect_remote(&id)?;
     }

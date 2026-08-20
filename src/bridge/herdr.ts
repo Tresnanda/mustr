@@ -125,6 +125,16 @@ export const renameTab = (tabId: string, label: string) =>
   apiRequest("tab.rename", { tab_id: tabId, label });
 export const closeWorkspace = (workspaceId: string) =>
   apiRequest("workspace.close", { workspace_id: workspaceId });
+export const createWorktree = (workspaceId: string, branch: string) =>
+  apiRequest<{ workspace?: WorkspaceInfo; root_pane?: PaneInfo }>("worktree.create", {
+    workspace_id: workspaceId,
+    branch,
+    focus: true,
+  });
+export const removeWorktree = (workspaceId: string) =>
+  apiRequest("worktree.remove", { workspace_id: workspaceId });
+export const listPlugins = () =>
+  apiRequest<{ plugins: { id?: string; name?: string; enabled?: boolean }[] }>("plugin.list");
 export const createWorkspace = (cwd: string) =>
   apiRequest<{ workspace?: WorkspaceInfo; root_pane?: PaneInfo }>("workspace.create", { cwd });
 

@@ -100,6 +100,28 @@ pub fn list() -> Vec<ServerRow> {
         kind: "local".into(),
         active: active == "local",
     }];
+    // Named herdr sessions on this Mac: each is its own server + sockets.
+    if let Some(home) = std::env::var_os("HOME") {
+        let sessions = PathBuf::from(home).join(".config/herdr/sessions");
+        if let Ok(entries) = std::fs::read_dir(sessions) {
+            let mut names: Vec<String> = entries
+                .flatten()
+                .filter(|e| e.path().is_dir())
+                .filter_map(|e| e.file_name().into_string().ok())
+                .collect();
+            names.sort();
+            for name in names {
+                let id = format!("local:{name}");
+                rows.push(ServerRow {
+                    id: id.clone(),
+                    name: name.clone(),
+                    detail: format!("This Mac · session {name}"),
+                    kind: "local".into(),
+                    active: active == id,
+                });
+            }
+        }
+    }
     for r in load_remotes() {
         rows.push(ServerRow {
             id: r.id.clone(),
@@ -180,13 +202,20 @@ fn install_active(active: Active) {
 }
 
 pub fn switch_to_local() -> Result<(), String> {
-    let api = paths::api_socket_path(None).ok_or("no home dir")?;
-    let client = paths::client_socket_path(None).ok_or("no home dir")?;
+    switch_to_local_session(None)
+}
+
+pub fn switch_to_local_session(session: Option<&str>) -> Result<(), String> {
+    let api = paths::api_socket_path(session).ok_or("no home dir")?;
+    let client = paths::client_socket_path(session).ok_or("no home dir")?;
 
     if !ping_socket(&api) {
         // Auto-spawn a herdr server, mirroring herdr's own autodetect launch.
-        Command::new("herdr")
-            .arg("server")
+        let mut cmd = Command::new("herdr");
+        if let Some(name) = session {
+            cmd.env("HERDR_SESSION", name);
+        }
+        cmd.arg("server")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -211,7 +240,10 @@ pub fn switch_to_local() -> Result<(), String> {
     }
 
     install_active(Active {
-        server_id: "local".into(),
+        server_id: match session {
+            Some(name) => format!("local:{name}"),
+            None => "local".into(),
+        },
         api_path: api,
         client_path: client,
         tunnel: None,

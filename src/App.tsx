@@ -7,6 +7,7 @@ import { TabStrip } from "./components/tabs/TabStrip";
 import { dragHandlers } from "./components/DragRegion";
 import { TipProvider } from "./components/ui/Tip";
 import { Navigator } from "./components/command/Navigator";
+import { Toasts } from "./components/feedback/Toasts";
 import { ClosePaneDialog } from "./components/panes/ClosePaneDialog";
 import { statusSince, useMustr } from "./state/store";
 import { lastNotified } from "./bridge/notify";
@@ -257,6 +258,7 @@ export default function App() {
       </div>
     </div>
     <Navigator open={paletteOpen} onOpenChange={setPaletteOpen} />
+    <Toasts />
     <ClosePaneDialog paneId={closingPaneId} onOpenChange={(o) => !o && setClosingPaneId(null)} />
     </TipProvider>
   );
