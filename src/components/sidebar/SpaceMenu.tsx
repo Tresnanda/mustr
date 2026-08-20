@@ -21,8 +21,8 @@ export function SpaceMenu({
   const [closing, setClosing] = useState(false);
   const consequence =
     workspace.pane_count === 1
-      ? "Its terminal will close and anything it's running will end."
-      : `Its ${workspace.pane_count} terminals will close and anything they're running will end.`;
+      ? "Its pane will close and anything it's running will end."
+      : `Its ${workspace.pane_count} panes will close and anything they're running will end.`;
 
   return (
     <>

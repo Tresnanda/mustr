@@ -22,8 +22,8 @@ function CloseTabDialog({
   const refresh = useMustr((s) => s.refresh);
   const consequence =
     tab.pane_count === 1
-      ? "Its terminal will close and anything it's running will end."
-      : `Its ${tab.pane_count} terminals will close and anything they're running will end.`;
+      ? "Its pane will close and anything it's running will end."
+      : `Its ${tab.pane_count} panes will close and anything they're running will end.`;
   return (
     <Dialog.Portal>
       <Dialog.Overlay className={DIALOG_OVERLAY} />

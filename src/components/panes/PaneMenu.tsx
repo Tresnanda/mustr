@@ -42,7 +42,7 @@ export function PaneMenu({ paneId, children }: { paneId: string; children: React
               className={MENU_ITEM_DANGER}
               onSelect={() => setConfirmClose(true)}
             >
-              Close terminal
+              {pane?.agent ? "Close agent" : "Close pane"}
             </ContextMenu.Item>
           </ContextMenu.Content>
         </ContextMenu.Portal>
@@ -53,7 +53,7 @@ export function PaneMenu({ paneId, children }: { paneId: string; children: React
           <Dialog.Overlay className={DIALOG_OVERLAY} />
           <Dialog.Content className={DIALOG_CONTENT} style={MENU_SHADOW}>
             <Dialog.Title className="text-[13px] font-semibold text-text-primary">
-              Close this terminal?
+              {pane?.agent ? "Close this agent?" : "Close this pane?"}
             </Dialog.Title>
             <Dialog.Description className="mt-1 text-[13px] leading-snug text-text-secondary">
               {pane?.agent
@@ -78,7 +78,7 @@ export function PaneMenu({ paneId, children }: { paneId: string; children: React
                 }}
                 className="rounded-lg bg-danger-soft px-3 py-1.5 text-[13px] font-medium text-danger transition-colors duration-100 active:scale-[0.97]"
               >
-                Close terminal
+                {pane?.agent ? "Close agent" : "Close pane"}
               </button>
             </div>
           </Dialog.Content>
