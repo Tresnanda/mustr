@@ -3,7 +3,7 @@
 // not enumerated globally: they nest under a space when that space is scoped,
 // like herdr itself. Selection is instant — no traveling indicator.
 
-import { useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Folder, FolderPlus, Folders, FunnelSimple, MagnifyingGlass, Plus } from "@phosphor-icons/react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -68,27 +68,26 @@ function HeaderButton({
   );
 }
 
-function Row({
-  onClick,
-  selected,
-  children,
-  label,
-  tall,
-  indent,
-}: {
-  onClick: () => void;
+interface RowProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   selected?: boolean;
-  children: React.ReactNode;
   label: string;
   tall?: boolean;
   indent?: boolean;
-}) {
+}
+
+/** Forwards unknown props/ref so Radix asChild triggers (context menus,
+    tooltips) can attach their handlers. */
+const Row = React.forwardRef<HTMLButtonElement, RowProps>(function Row(
+  { selected, label, tall, indent, children, className: _ignored, ...rest },
+  ref,
+) {
   return (
     <button
+      ref={ref}
       type="button"
-      onClick={onClick}
       aria-label={label}
       aria-current={selected ? "true" : undefined}
+      {...rest}
       className={`flex w-full items-center gap-2.5 rounded-lg text-left outline-offset-[-2px] transition-colors duration-100 ${
         selected ? "bg-selection" : "hover:bg-hover"
       } ${tall ? "py-[7px]" : "h-8"} ${indent ? "pl-8 pr-2" : "px-2"}`}
@@ -96,7 +95,7 @@ function Row({
       {children}
     </button>
   );
-}
+});
 
 function AgentRow({ pane, selected, now }: { pane: PaneInfo; selected: boolean; now: number }) {
   const selectPane = useMustr((s) => s.selectPane);

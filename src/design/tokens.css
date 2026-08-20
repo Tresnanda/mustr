@@ -28,6 +28,8 @@
   --status-blocked: oklch(0.76 0.11 70);
   --status-blocked-soft: oklch(0.76 0.11 70 / 0.15);
   --alive: oklch(0.72 0.11 155);
+  --danger: oklch(0.67 0.19 25);
+  --danger-soft: oklch(0.67 0.19 25 / 0.15);
 
   /* ---- Ink statuses ---- */
   --status-working: #b8b8b8;

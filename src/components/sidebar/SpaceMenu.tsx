@@ -38,22 +38,22 @@ export function SpaceMenu({
                 });
               }}
             >
-              <Plus size={15} className="text-text-secondary" aria-hidden />
+              <Plus size={14} className="text-text-secondary" aria-hidden />
               New tab in {workspace.label}
             </ContextMenu.Item>
             <ContextMenu.Item
               className={`${MENU_ITEM} text-text-primary`}
               onSelect={() => setRenaming(true)}
             >
-              <PencilSimple size={15} className="text-text-secondary" aria-hidden />
+              <PencilSimple size={14} className="text-text-secondary" aria-hidden />
               Rename space…
             </ContextMenu.Item>
             <ContextMenu.Separator className={MENU_SEPARATOR} />
             <ContextMenu.Item
-              className={`${MENU_ITEM} text-status-blocked`}
+              className={`${MENU_ITEM} text-danger`}
               onSelect={() => setClosing(true)}
             >
-              <X size={15} aria-hidden />
+              <X size={14} aria-hidden />
               Close space
             </ContextMenu.Item>
           </ContextMenu.Content>
@@ -97,7 +97,7 @@ export function SpaceMenu({
                     .then(refresh)
                     .finally(() => setClosing(false));
                 }}
-                className="rounded-lg bg-status-blocked-soft px-3 py-1.5 text-[13px] font-medium text-status-blocked transition-colors duration-100 active:scale-[0.97]"
+                className="rounded-lg bg-danger-soft px-3 py-1.5 text-[13px] font-medium text-danger transition-colors duration-100 active:scale-[0.97]"
               >
                 Close space
               </button>

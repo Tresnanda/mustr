@@ -23,6 +23,8 @@
   --color-status-idle: var(--status-idle);
   --color-status-unknown: var(--status-unknown);
   --color-alive: var(--alive);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
   --font-ui: var(--font-ui);
   --font-mono: var(--font-mono);
 }

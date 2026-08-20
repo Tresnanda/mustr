@@ -9,9 +9,7 @@ import { Columns, Rows, X } from "@phosphor-icons/react";
 import { closePane, focusPane, splitPane } from "../../bridge/herdr";
 import { useMustr } from "../../state/store";
 import { paneDisplayName } from "../../lib/names";
-
-const ITEM =
-  "flex w-full cursor-default items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] outline-none data-[highlighted]:bg-hover";
+import { MENU_CONTENT, MENU_ITEM as ITEM, MENU_SEPARATOR, MENU_SHADOW } from "../ui/menu";
 
 export function PaneMenu({ paneId, children }: { paneId: string; children: React.ReactNode }) {
   const { refresh, selectPane, panes } = useMustr();
@@ -31,23 +29,23 @@ export function PaneMenu({ paneId, children }: { paneId: string; children: React
         <ContextMenu.Trigger asChild>{children}</ContextMenu.Trigger>
         <ContextMenu.Portal>
           <ContextMenu.Content
-            className="z-30 w-52 rounded-xl bg-sidebar p-1.5 duration-150 ease-out data-[state=open]:animate-in data-[state=open]:fade-in data-[state=open]:zoom-in-95"
-            style={{ boxShadow: "var(--shadow-popover)" }}
+            className={MENU_CONTENT}
+            style={MENU_SHADOW}
           >
             <ContextMenu.Item className={`${ITEM} text-text-primary`} onSelect={() => void split("right")}>
-              <Columns size={15} className="text-text-secondary" aria-hidden />
+              <Columns size={14} className="text-text-secondary" aria-hidden />
               Split right
             </ContextMenu.Item>
             <ContextMenu.Item className={`${ITEM} text-text-primary`} onSelect={() => void split("down")}>
-              <Rows size={15} className="text-text-secondary" aria-hidden />
+              <Rows size={14} className="text-text-secondary" aria-hidden />
               Split down
             </ContextMenu.Item>
-            <ContextMenu.Separator className="mx-2 my-1 h-px bg-border-subtle" />
+            <ContextMenu.Separator className={MENU_SEPARATOR} />
             <ContextMenu.Item
-              className={`${ITEM} text-status-blocked`}
+              className={`${ITEM} text-danger`}
               onSelect={() => setConfirmClose(true)}
             >
-              <X size={15} aria-hidden />
+              <X size={14} aria-hidden />
               Close terminal
             </ContextMenu.Item>
           </ContextMenu.Content>
@@ -83,7 +81,7 @@ export function PaneMenu({ paneId, children }: { paneId: string; children: React
                     .then(refresh)
                     .finally(() => setConfirmClose(false));
                 }}
-                className="rounded-lg bg-status-blocked-soft px-3 py-1.5 text-[13px] font-medium text-status-blocked transition-colors duration-100 active:scale-[0.97]"
+                className="rounded-lg bg-danger-soft px-3 py-1.5 text-[13px] font-medium text-danger transition-colors duration-100 active:scale-[0.97]"
               >
                 Close terminal
               </button>

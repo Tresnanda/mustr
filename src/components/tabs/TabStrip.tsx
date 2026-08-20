@@ -51,7 +51,7 @@ function CloseTabDialog({
                 .then(refresh)
                 .finally(onDone);
             }}
-            className="rounded-lg bg-status-blocked-soft px-3 py-1.5 text-[13px] font-medium text-status-blocked transition-colors duration-100 hover:bg-status-blocked-soft active:scale-[0.97]"
+            className="rounded-lg bg-danger-soft px-3 py-1.5 text-[13px] font-medium text-danger transition-colors duration-100 active:scale-[0.97]"
           >
             Close tab
           </button>
@@ -108,15 +108,15 @@ export function TabStrip() {
                 className={`${MENU_ITEM} text-text-primary`}
                 onSelect={() => setRenaming(tab)}
               >
-                <PencilSimple size={15} className="text-text-secondary" aria-hidden />
+                <PencilSimple size={14} className="text-text-secondary" aria-hidden />
                 Rename tab…
               </ContextMenu.Item>
               <ContextMenu.Separator className={MENU_SEPARATOR} />
               <ContextMenu.Item
-                className={`${MENU_ITEM} text-status-blocked`}
+                className={`${MENU_ITEM} text-danger`}
                 onSelect={() => setClosing(tab)}
               >
-                <X size={15} aria-hidden />
+                <X size={14} aria-hidden />
                 Close tab
               </ContextMenu.Item>
             </ContextMenu.Content>
