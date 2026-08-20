@@ -146,7 +146,8 @@ function Node({
 }
 
 export function PaneGrid() {
-  const { tree, selectedTabId, selectedPaneId } = useMustr();
+  const { tree, selectedTabId, selectedPaneId, layouts } = useMustr();
+  const zoomed = layouts.find((l) => l.tab_id === selectedTabId)?.zoomed ?? false;
   const [overrides, setOverrides] = useState<Map<string, number>>(new Map());
 
   const setOverride = useCallback((key: string, ratio: number | null) => {
@@ -159,6 +160,17 @@ export function PaneGrid() {
   }, []);
 
   if (!tree || !selectedTabId) return null;
+  if (zoomed && selectedPaneId) {
+    return (
+      <div className="flex h-full min-h-0">
+        <PaneMenu paneId={selectedPaneId}>
+          <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+            <TerminalView paneId={selectedPaneId} />
+          </div>
+        </PaneMenu>
+      </div>
+    );
+  }
   return (
     <div className="flex h-full min-h-0">
       <Node

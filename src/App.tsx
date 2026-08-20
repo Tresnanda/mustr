@@ -7,6 +7,7 @@ import { TabStrip } from "./components/tabs/TabStrip";
 import { dragHandlers } from "./components/DragRegion";
 import { TipProvider } from "./components/ui/Tip";
 import { statusSince, useMustr } from "./state/store";
+import { lastNotified } from "./bridge/notify";
 import { paneDisplayName } from "./lib/names";
 import { relativeAge } from "./lib/time";
 
@@ -61,9 +62,18 @@ export default function App() {
     );
     const fallback = setInterval(refresh, 15000);
     const clock = setInterval(tick, 30000);
+    // Clicking a macOS notification activates the app; route that activation
+    // to the notified pane when it happens within half a minute.
+    const onActivate = () => {
+      if (lastNotified && Date.now() - lastNotified.at < 30_000) {
+        useMustr.getState().selectPane(lastNotified.paneId);
+      }
+    };
+    window.addEventListener("focus", onActivate);
     return () => {
       clearInterval(fallback);
       clearInterval(clock);
+      window.removeEventListener("focus", onActivate);
       unlistenEvent.then((fn) => fn());
       unlistenConn.then((fn) => fn());
     };

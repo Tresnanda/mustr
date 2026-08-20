@@ -110,6 +110,7 @@ export const focusPane = (paneId: string) => apiRequest("pane.focus", { pane_id:
 export const splitPane = (paneId: string, direction: "right" | "down") =>
   apiRequest("pane.split", { pane_id: paneId, direction });
 export const closePane = (paneId: string) => apiRequest("pane.close", { pane_id: paneId });
+export const zoomPane = (paneId: string) => apiRequest("pane.zoom", { pane_id: paneId });
 export const createTab = (workspaceId: string) =>
   apiRequest<{ tab?: TabInfo; root_pane?: PaneInfo }>("tab.create", { workspace_id: workspaceId });
 export const closeTab = (tabId: string) => apiRequest("tab.close", { tab_id: tabId });

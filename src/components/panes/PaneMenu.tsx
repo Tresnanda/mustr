@@ -5,15 +5,23 @@
 import { useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Dialog from "@radix-ui/react-dialog";
-import { closePane, focusPane, splitPane } from "../../bridge/herdr";
+import { closePane, focusPane, splitPane, zoomPane } from "../../bridge/herdr";
 import { useMustr } from "../../state/store";
 import { cwdFolder, prettyAgent } from "../../lib/names";
 import { MENU_CONTENT, MENU_ITEM as ITEM, MENU_ITEM_DANGER, MENU_SEPARATOR, MENU_SHADOW, DIALOG_CONTENT, DIALOG_OVERLAY } from "../ui/menu";
 
 export function PaneMenu({ paneId, children }: { paneId: string; children: React.ReactNode }) {
-  const { refresh, selectPane, panes } = useMustr();
+  const { refresh, selectPane, panes, layouts } = useMustr();
   const [confirmClose, setConfirmClose] = useState(false);
   const pane = panes.find((p) => p.pane_id === paneId);
+  const zoomed = layouts.find((l) => l.tab_id === pane?.tab_id)?.zoomed ?? false;
+
+  const toggleZoom = async () => {
+    await focusPane(paneId).catch(() => {});
+    selectPane(paneId);
+    await zoomPane(paneId).catch(() => {});
+    await refresh();
+  };
 
   const split = async (direction: "right" | "down") => {
     await focusPane(paneId).catch(() => {});
@@ -36,6 +44,9 @@ export function PaneMenu({ paneId, children }: { paneId: string; children: React
             </ContextMenu.Item>
             <ContextMenu.Item className={`${ITEM} text-text-primary`} onSelect={() => void split("down")}>
               Split down
+            </ContextMenu.Item>
+            <ContextMenu.Item className={`${ITEM} text-text-primary`} onSelect={() => void toggleZoom()}>
+              {zoomed ? "Exit zoom" : "Zoom pane"}
             </ContextMenu.Item>
             <ContextMenu.Separator className={MENU_SEPARATOR} />
             <ContextMenu.Item

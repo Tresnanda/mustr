@@ -11,6 +11,11 @@ import type { AgentStatus } from "./herdr";
 
 let permitted: boolean | null = null;
 
+/** Most recent notification target, so app activation can route to it.
+    macOS gives us no per-notification click callback in the webview; an
+    activation shortly after a notification is treated as that click. */
+export let lastNotified: { paneId: string; at: number } | null = null;
+
 async function ensurePermission(): Promise<boolean> {
   if (permitted !== null) return permitted;
   permitted = await isPermissionGranted();
@@ -24,8 +29,10 @@ export async function notifyStatusChange(
   status: AgentStatus,
   paneName: string,
   agent?: string,
+  paneId?: string,
 ): Promise<void> {
   if (status !== "blocked" && status !== "done") return;
+  if (paneId) lastNotified = { paneId, at: Date.now() };
   if (!(await ensurePermission())) return;
   const who = agent ? `${agent} — ${paneName}` : paneName;
   sendNotification(

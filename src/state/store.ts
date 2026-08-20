@@ -76,7 +76,7 @@ function trackStatuses(snapshot: SessionSnapshot, hasLoaded: boolean) {
       statusSince.set(pane.pane_id, now);
     }
     if (hasLoaded && prev && prev !== pane.agent_status) {
-      notifyStatusChange(pane.agent_status, paneDisplayName(pane), pane.agent);
+      notifyStatusChange(pane.agent_status, paneDisplayName(pane), pane.agent, pane.pane_id);
     }
   }
   lastStatus = new Map(snapshot.panes.map((p) => [p.pane_id, p.agent_status]));
