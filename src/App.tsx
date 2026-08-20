@@ -2,7 +2,8 @@ import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Sidebar } from "./components/sidebar/Sidebar";
 import { STATUS_LABEL } from "./components/status";
-import { TerminalView } from "./components/terminal/TerminalView";
+import { PaneGrid } from "./components/panes/PaneGrid";
+import { TabStrip } from "./components/tabs/TabStrip";
 import { dragHandlers } from "./components/DragRegion";
 import { statusSince, useMustr } from "./state/store";
 import { paneDisplayName } from "./lib/names";
@@ -27,7 +28,9 @@ function Toolbar() {
           <span className="truncate text-[13px] font-semibold tracking-[-0.01em] text-text-primary">
             {paneDisplayName(pane)}
           </span>
-          {space && <span className="truncate text-[12px] text-text-muted">{space}</span>}
+          {space && space !== paneDisplayName(pane) && (
+            <span className="truncate text-[12px] text-text-muted">{space}</span>
+          )}
           <span className="flex-1" />
           {showStatus && (
             <span
@@ -73,10 +76,11 @@ export default function App() {
 
       <div className="flex min-w-0 flex-1 flex-col bg-content">
         <Toolbar />
+        <TabStrip />
         <main className="min-h-0 flex-1">
-          {/* Pane switching is high-frequency: instant, no transition. */}
+          {/* Pane/tab switching is high-frequency: instant, no transition. */}
           {selectedPaneId ? (
-            <TerminalView key={selectedPaneId} paneId={selectedPaneId} />
+            <PaneGrid />
           ) : (
             <div className="flex h-full items-center justify-center">
               <div className="max-w-sm text-center">

@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "./design/tokens.css";
 @import "@xterm/xterm/css/xterm.css";
+@import "tw-animate-css";
 
 @theme {
   --color-sidebar: var(--surface-sidebar);

@@ -25,11 +25,53 @@ export interface WorkspaceInfo {
   agent_status: AgentStatus;
   pane_count: number;
   tab_count: number;
+  active_tab_id: string;
 }
+
+export interface TabInfo {
+  tab_id: string;
+  workspace_id: string;
+  number: number;
+  label: string;
+  focused: boolean;
+  pane_count: number;
+  agent_status: AgentStatus;
+}
+
+/** Per-tab layout summary from session.snapshot (cell-grid rects). */
+export interface TabLayout {
+  workspace_id: string;
+  tab_id: string;
+  zoomed: boolean;
+  focused_pane_id: string;
+}
+
+/** BSP tree from layout.export — geometry and split addressing in one. */
+export type LayoutNode =
+  | { type: "pane"; pane_id: string; cwd: string }
+  | {
+      type: "split";
+      direction: "right" | "down";
+      ratio: number;
+      first: LayoutNode;
+      second: LayoutNode;
+    };
 
 export interface ServerInfo {
   version: string;
   protocol: number;
+}
+
+export interface SessionSnapshot {
+  version: string;
+  protocol: number;
+  focused_workspace_id: string | null;
+  focused_tab_id: string | null;
+  focused_pane_id: string | null;
+  workspaces: WorkspaceInfo[];
+  tabs: TabInfo[];
+  panes: PaneInfo[];
+  layouts: TabLayout[];
 }
 
 export type TermEvent =
@@ -46,19 +88,34 @@ export async function apiRequest<T = unknown>(
   return invoke<T>("api_request", { method, params });
 }
 
-export async function ping(): Promise<ServerInfo> {
-  return apiRequest<ServerInfo>("ping");
+export const ping = () => apiRequest<ServerInfo>("ping");
+
+export async function sessionSnapshot(): Promise<SessionSnapshot> {
+  const result = await apiRequest<{ snapshot: SessionSnapshot }>("session.snapshot");
+  return result.snapshot;
 }
 
-export async function listPanes(): Promise<PaneInfo[]> {
-  const result = await apiRequest<{ panes: PaneInfo[] }>("pane.list");
-  return result.panes ?? [];
+export async function layoutExport(tabId: string): Promise<{ root: LayoutNode; focused_pane_id: string }> {
+  const result = await apiRequest<{ layout: { root: LayoutNode; focused_pane_id: string } }>(
+    "layout.export",
+    { tab_id: tabId },
+  );
+  return result.layout;
 }
 
-export async function listWorkspaces(): Promise<WorkspaceInfo[]> {
-  const result = await apiRequest<{ workspaces: WorkspaceInfo[] }>("workspace.list");
-  return result.workspaces ?? [];
-}
+export const setSplitRatio = (tabId: string, path: string[], ratio: number) =>
+  apiRequest("layout.set_split_ratio", { tab_id: tabId, path, ratio });
+
+export const focusPane = (paneId: string) => apiRequest("pane.focus", { pane_id: paneId });
+export const splitPane = (paneId: string, direction: "right" | "down") =>
+  apiRequest("pane.split", { pane_id: paneId, direction });
+export const closePane = (paneId: string) => apiRequest("pane.close", { pane_id: paneId });
+export const createTab = (workspaceId: string) =>
+  apiRequest<{ tab?: TabInfo; root_pane?: PaneInfo }>("tab.create", { workspace_id: workspaceId });
+export const closeTab = (tabId: string) => apiRequest("tab.close", { tab_id: tabId });
+export const focusTab = (tabId: string) => apiRequest("tab.focus", { tab_id: tabId });
+export const createWorkspace = (cwd: string) =>
+  apiRequest<{ workspace?: WorkspaceInfo; root_pane?: PaneInfo }>("workspace.create", { cwd });
 
 export function attachPane(
   attachId: string,
@@ -78,17 +135,13 @@ export function paneInput(attachId: string, data: Uint8Array): Promise<void> {
   return invoke("pane_input", { attachId, b64: btoa(binary) });
 }
 
-export function paneResize(attachId: string, cols: number, rows: number): Promise<void> {
-  return invoke("pane_resize", { attachId, cols, rows });
-}
+export const paneResize = (attachId: string, cols: number, rows: number) =>
+  invoke<void>("pane_resize", { attachId, cols, rows });
 
-export function paneScroll(attachId: string, up: boolean, lines: number): Promise<void> {
-  return invoke("pane_scroll", { attachId, up, lines, column: null, row: null });
-}
+export const paneScroll = (attachId: string, up: boolean, lines: number) =>
+  invoke<void>("pane_scroll", { attachId, up, lines, column: null, row: null });
 
-export function detachPane(attachId: string): Promise<void> {
-  return invoke("detach_pane", { attachId });
-}
+export const detachPane = (attachId: string) => invoke<void>("detach_pane", { attachId });
 
 export function decodeBase64(b64: string): Uint8Array {
   const binary = atob(b64);
