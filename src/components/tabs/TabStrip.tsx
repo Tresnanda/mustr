@@ -67,37 +67,48 @@ export function TabStrip() {
 
   const pane = panes.find((p) => p.pane_id === selectedPaneId);
   const workspaceTabs = tabs.filter((t) => t.workspace_id === pane?.workspace_id);
-  if (workspaceTabs.length <= 1) return null;
+  if (workspaceTabs.length === 0) return null;
 
   return (
-    <div className="flex h-9 shrink-0 items-center gap-1 px-3">
+    <div className="flex h-9 shrink-0 items-center gap-1.5 px-3" role="tablist" aria-label="Tabs">
       {workspaceTabs.map((tab) => {
         const active = tab.tab_id === selectedTabId;
+        const busy = tab.agent_status === "working";
+        const blocked = tab.agent_status === "blocked";
         return (
           <ContextMenu.Root key={tab.tab_id}>
           <ContextMenu.Trigger asChild>
           <div
-            className={`group flex h-7 items-center rounded-lg transition-colors duration-100 ${
-              active ? "bg-selection" : "hover:bg-hover"
+            className={`group relative flex h-[26px] min-w-[56px] max-w-[150px] flex-1 items-center justify-center rounded-[6px] transition-colors duration-100 ${
+              active
+                ? "bg-[rgb(255_255_255/0.16)]"
+                : "bg-[rgb(255_255_255/0.045)] hover:bg-[rgb(255_255_255/0.08)]"
             }`}
           >
             <button
               type="button"
+              role="tab"
+              aria-selected={active}
               onClick={() => selectTab(tab.tab_id)}
-              aria-current={active ? "true" : undefined}
-              className={`h-full pl-3 pr-1.5 text-[12.5px] ${
+              className={`flex h-full w-full items-center justify-center gap-1.5 px-2 text-[12.5px] tabular-nums outline-offset-[-2px] ${
                 active ? "font-medium text-text-primary" : "text-text-secondary"
               }`}
             >
-              {tab.label}
+              {busy && (
+                <span className="status-dot-working size-[5px] shrink-0 rounded-full bg-status-working" aria-label="working" />
+              )}
+              {blocked && (
+                <span className="size-[5px] shrink-0 rounded-full bg-status-blocked" aria-label="needs input" />
+              )}
+              <span className="truncate">{tab.label}</span>
             </button>
             <button
               type="button"
               onClick={() => setClosing(tab)}
               aria-label={`Close tab ${tab.label}`}
-              className="mr-1 flex size-5 items-center justify-center rounded-md text-text-muted opacity-0 transition-opacity duration-100 hover:bg-hover hover:text-text-primary focus-visible:opacity-100 group-hover:opacity-100"
+              className="absolute right-0.5 flex size-5 items-center justify-center rounded-[5px] text-text-muted opacity-0 transition-opacity duration-100 hover:bg-hover hover:text-text-primary focus-visible:opacity-100 group-hover:opacity-100"
             >
-              <X size={11} aria-hidden />
+              <X size={10} aria-hidden />
             </button>
           </div>
           </ContextMenu.Trigger>
@@ -126,7 +137,7 @@ export function TabStrip() {
           type="button"
           onClick={() => void newTerminal()}
           aria-label="New tab"
-          className="flex size-7 items-center justify-center rounded-lg text-text-muted transition-colors duration-100 hover:bg-hover hover:text-text-primary active:scale-[0.96]"
+          className="flex h-[26px] w-8 shrink-0 items-center justify-center rounded-[6px] text-text-muted transition-colors duration-100 hover:bg-[rgb(255_255_255/0.08)] hover:text-text-primary active:scale-[0.96]"
         >
           <Plus size={13} aria-hidden />
         </button>
