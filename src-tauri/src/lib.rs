@@ -25,6 +25,11 @@ fn api_request(method: String, params: Option<Value>) -> Result<Value, String> {
 }
 
 #[tauri::command]
+fn git_summaries(cwds: Vec<String>) -> std::collections::HashMap<String, herdr::gitinfo::GitSummary> {
+    herdr::gitinfo::summaries(cwds)
+}
+
+#[tauri::command]
 fn servers_list() -> Vec<ServerRow> {
     herdr::servers::list()
 }
@@ -153,6 +158,7 @@ pub fn run() {
         .manage(Attachments::default())
         .invoke_handler(tauri::generate_handler![
             api_request,
+            git_summaries,
             servers_list,
             server_add,
             ssh_aliases,

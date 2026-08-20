@@ -3,6 +3,7 @@
 
 pub mod api;
 pub mod events;
+pub mod gitinfo;
 pub mod paths;
 pub mod servers;
 pub mod term;

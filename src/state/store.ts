@@ -21,7 +21,7 @@ import {
   type TabLayout,
   type WorkspaceInfo,
 } from "../bridge/herdr";
-import { connectServer, listServers, type ServerRow } from "../bridge/servers";
+import { connectServer, gitSummaries, listServers, type GitSummary, type ServerRow } from "../bridge/servers";
 import { notifyStatusChange } from "../bridge/notify";
 import { paneDisplayName } from "../lib/names";
 
@@ -55,6 +55,8 @@ interface MustrState {
   /** Server id currently connecting, for pending UI. */
   connectingId: string | null;
   connectError: string | null;
+  /** cwd → branch/dirty, local server only. */
+  git: Record<string, GitSummary>;
   refresh: () => Promise<void>;
   scheduleRefresh: () => void;
   setConnected: (connected: boolean) => void;
@@ -78,6 +80,7 @@ function touchVisited(visited: string[], tabId: string | null): string[] {
 }
 
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+let lastGitFetch = 0;
 let lastStatus = new Map<string, AgentStatus>();
 
 async function fetchTree(tabId: string | null): Promise<LayoutNode | null> {
@@ -132,6 +135,7 @@ export const useMustr = create<MustrState>((set, get) => ({
   activeServerId: "local",
   connectingId: null,
   connectError: null,
+  git: {},
 
   refresh: async () => {
     try {
@@ -149,6 +153,15 @@ export const useMustr = create<MustrState>((set, get) => ({
           null;
         selectedPaneId = focused?.pane_id ?? null;
         selectedTabId = focused?.tab_id ?? null;
+      }
+
+      // Git summaries: local only, throttled — one batch per 10s.
+      if (get().activeServerId === "local" && Date.now() - lastGitFetch > 10_000) {
+        lastGitFetch = Date.now();
+        const cwds = [...new Set(snapshot.panes.map((p) => p.cwd).filter(Boolean))];
+        void gitSummaries(cwds)
+          .then((git) => set({ git }))
+          .catch(() => {});
       }
 
       const tree = await fetchTree(selectedTabId);

@@ -174,6 +174,7 @@ export function Sidebar() {
     scopeId === workspaceId ? scoped.filter((p) => !p.agent) : [];
 
   const selectPane = useMustr((s) => s.selectPane);
+  const git = useMustr((s) => s.git);
   const hideQuiet = useMustr((s) => s.hideQuiet);
   const toggleHideQuiet = useMustr((s) => s.toggleHideQuiet);
   const newSpace = useMustr((s) => s.newSpace);
@@ -276,6 +277,16 @@ export function Sidebar() {
                 <span className="min-w-0 flex-1 truncate text-[13px] text-text-primary">
                   {ws.label}
                 </span>
+                {(() => {
+                  const cwd = panes.find((p) => p.workspace_id === ws.workspace_id)?.cwd;
+                  const info = cwd ? git[cwd] : undefined;
+                  return info ? (
+                    <span className="max-w-[88px] truncate font-mono text-[10.5px] text-text-muted">
+                      {info.branch}
+                      {info.dirty ? "*" : ""}
+                    </span>
+                  ) : null;
+                })()}
                 <span className="text-[12px] tabular-nums text-text-muted">{ws.pane_count}</span>
               </Row>
               </SpaceMenu>
