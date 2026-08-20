@@ -7,6 +7,7 @@ import { useCallback, useRef, useState } from "react";
 import { setSplitRatio, type LayoutNode } from "../../bridge/herdr";
 import { useMustr } from "../../state/store";
 import { TerminalView } from "../terminal/TerminalView";
+import { PaneMenu } from "./PaneMenu";
 
 const MIN_RATIO = 0.15;
 const HANDLE_PX = 7;
@@ -83,16 +84,18 @@ function Node({
   if (node.type === "pane") {
     const focused = node.pane_id === focusedPaneId;
     return (
-      <div
-        className={`relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-md ${
-          focused ? "ring-1 ring-border-strong" : ""
-        }`}
-        onMouseDownCapture={() => {
-          if (!focused) selectPane(node.pane_id);
-        }}
-      >
-        <TerminalView paneId={node.pane_id} />
-      </div>
+      <PaneMenu paneId={node.pane_id}>
+        <div
+          className={`relative min-h-0 min-w-0 flex-1 overflow-hidden ${
+            focused ? "shadow-[inset_0_0_0_1px_var(--border-strong)]" : ""
+          }`}
+          onMouseDownCapture={() => {
+            if (!focused) selectPane(node.pane_id);
+          }}
+        >
+          <TerminalView paneId={node.pane_id} />
+        </div>
+      </PaneMenu>
     );
   }
 
@@ -157,7 +160,7 @@ export function PaneGrid() {
 
   if (!tree || !selectedTabId) return null;
   return (
-    <div className="flex h-full min-h-0 p-2 pt-0">
+    <div className="flex h-full min-h-0">
       <Node
         node={tree}
         path={[]}

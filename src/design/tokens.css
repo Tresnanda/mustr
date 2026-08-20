@@ -7,7 +7,7 @@
   color-scheme: dark;
 
   /* ---- Surfaces (hex literals; terminal theme reuses --surface-content) ---- */
-  --surface-content: rgb(30 30 30 / 0.82);
+  --surface-content: #1e1e1e; /* solid: terminals must blend seamlessly */
   --surface-opaque: #1e1e1e;
   --surface-sidebar: rgb(40 40 40 / 0.52);
   --surface-hover: rgb(255 255 255 / 0.05);
