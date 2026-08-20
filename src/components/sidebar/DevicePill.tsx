@@ -8,12 +8,11 @@ import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Dialog from "@radix-ui/react-dialog";
 import { CaretUpDown, Check, CircleNotch, Desktop, HardDrives, Plus } from "@phosphor-icons/react";
 import { useMustr } from "../../state/store";
-import { addServer, type ServerRow } from "../../bridge/servers";
+import { addServer, sshAliases, type ServerRow } from "../../bridge/servers";
 import {
   DIALOG_CONTENT,
   DIALOG_OVERLAY,
   MENU_CONTENT,
-  MENU_ITEM,
   MENU_ITEM_DANGER,
   MENU_SEPARATOR,
   MENU_SHADOW,
@@ -27,17 +26,23 @@ function DeviceRow({ server }: { server: ServerRow }) {
 
   const row = (
     <Dropdown.Item
-      className={`${MENU_ITEM} h-auto py-1.5 text-text-primary data-[disabled]:opacity-60`}
+      className={`flex h-auto w-full cursor-default items-center gap-3 rounded-[7px] px-2.5 py-2 text-text-primary outline-none data-[disabled]:opacity-60 data-[highlighted]:bg-[rgb(255_255_255/0.07)] ${
+        server.active ? "bg-[rgb(255_255_255/0.05)]" : ""
+      }`}
       disabled={connecting}
       onSelect={(e) => {
         e.preventDefault(); // keep the menu open while connecting
         void switchServer(server.id);
       }}
     >
-      <Icon size={16} className="shrink-0 text-text-secondary" aria-hidden />
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-[rgb(255_255_255/0.06)]">
+        <Icon size={15} className="text-text-secondary" aria-hidden />
+      </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-medium">{server.name}</span>
-        <span className="block truncate text-[11.5px] text-text-secondary">{server.detail}</span>
+        <span className="block truncate text-[13px] font-medium leading-tight">{server.name}</span>
+        <span className="mt-px block truncate text-[11.5px] leading-tight text-text-secondary">
+          {server.detail}
+        </span>
       </span>
       {connecting ? (
         <CircleNotch size={14} className="shrink-0 animate-spin text-text-secondary" aria-label="connecting" />
@@ -70,6 +75,11 @@ function AddDeviceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
   const [name, setName] = useState("");
   const [host, setHost] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [aliases, setAliases] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (open) void sshAliases().then(setAliases).catch(() => setAliases([]));
+  }, [open]);
 
   const save = async () => {
     try {
@@ -94,35 +104,63 @@ function AddDeviceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
         <Dialog.Overlay className={DIALOG_OVERLAY} />
         <Dialog.Content className={DIALOG_CONTENT} style={MENU_SHADOW}>
           <Dialog.Title className="text-[13px] font-semibold text-text-primary">Add device</Dialog.Title>
-          <Dialog.Description className="mt-1 text-[13px] leading-snug text-text-secondary">
-            Connects over your own SSH setup — keys, agent, and ~/.ssh/config included.
+          <Dialog.Description className="mt-1.5 text-[13px] leading-snug text-text-secondary">
+            Connects over your own SSH setup — keys, agent, and config included.
           </Dialog.Description>
-          <label className="mt-3 block text-[12px] font-medium text-text-secondary">
-            Name
-            <input
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Mac Studio"
-              style={{ outline: "none" }}
-              className={`${FIELD} mt-1`}
-            />
-          </label>
-          <label className="mt-2.5 block text-[12px] font-medium text-text-secondary">
-            SSH destination
-            <input
-              value={host}
-              onChange={(e) => setHost(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void save();
-              }}
-              placeholder="name@host, or an alias from ~/.ssh/config"
-              style={{ outline: "none" }}
-              className={`${FIELD} mt-1 font-mono text-[12px]`}
-            />
-          </label>
-          {error && <p className="mt-2 text-[12px] leading-snug text-danger">{error}</p>}
-          <div className="mt-4 flex justify-end gap-2">
+
+          <div className="mt-4 space-y-3.5">
+            <label className="block text-[12px] font-medium text-text-secondary">
+              Name
+              <input
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Mac Studio"
+                style={{ outline: "none" }}
+                className={`${FIELD} mt-1.5`}
+              />
+            </label>
+            <label className="block text-[12px] font-medium text-text-secondary">
+              SSH destination
+              <input
+                value={host}
+                onChange={(e) => setHost(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void save();
+                }}
+                placeholder="name@host or config alias"
+                style={{ outline: "none" }}
+                className={`${FIELD} mt-1.5 font-mono text-[12px]`}
+              />
+            </label>
+            {aliases.length > 0 && (
+              <div>
+                <p className="text-[12px] font-medium text-text-secondary">From your SSH config</p>
+                <div tabIndex={-1} style={{ outline: "none" }} className="mt-1.5 flex max-h-[92px] flex-wrap gap-1.5 overflow-y-auto pb-0.5">
+                  {aliases.map((alias) => (
+                    <button
+                      key={alias}
+                      type="button"
+                      onClick={() => {
+                        setHost(alias);
+                        if (!name.trim()) setName(alias);
+                      }}
+                      className={`rounded-md px-2 py-1 font-mono text-[11.5px] transition-colors duration-100 active:scale-[0.97] ${
+                        host === alias
+                          ? "bg-selection text-text-primary"
+                          : "bg-[rgb(255_255_255/0.06)] text-text-secondary hover:bg-[rgb(255_255_255/0.1)] hover:text-text-primary"
+                      }`}
+                    >
+                      {alias}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {error && <p className="text-[12px] leading-snug text-danger">{error}</p>}
+          </div>
+
+          <div className="mt-5 flex justify-end gap-2">
             <Dialog.Close asChild>
               <button
                 type="button"
@@ -200,7 +238,7 @@ export function DevicePill() {
             className={`${MENU_CONTENT} w-72`}
             style={MENU_SHADOW}
           >
-            <Dropdown.Label className="px-2.5 pb-1 pt-1.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-text-muted">
+            <Dropdown.Label className="px-2.5 pb-1.5 pt-1.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-text-muted">
               Devices
             </Dropdown.Label>
             {servers.map((s) => (
@@ -213,11 +251,13 @@ export function DevicePill() {
             )}
             <Dropdown.Separator className={MENU_SEPARATOR} />
             <Dropdown.Item
-              className={`${MENU_ITEM} h-auto py-1.5 text-text-primary`}
+              className="flex h-auto w-full cursor-default items-center gap-3 rounded-[7px] px-2.5 py-2 text-text-primary outline-none data-[highlighted]:bg-[rgb(255_255_255/0.07)]"
               onSelect={() => setAdding(true)}
             >
-              <Plus size={16} className="shrink-0 text-text-secondary" aria-hidden />
-              <span className="text-[13px]">Add device…</span>
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-[rgb(255_255_255/0.06)]">
+                <Plus size={15} className="text-text-secondary" aria-hidden />
+              </span>
+              <span className="text-[13px] font-medium">Add device…</span>
             </Dropdown.Item>
           </Dropdown.Content>
         </Dropdown.Portal>

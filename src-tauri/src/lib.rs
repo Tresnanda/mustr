@@ -35,6 +35,11 @@ fn server_add(name: String, host: String) -> Result<Vec<ServerRow>, String> {
 }
 
 #[tauri::command]
+fn ssh_aliases() -> Vec<String> {
+    herdr::servers::ssh_aliases()
+}
+
+#[tauri::command]
 fn server_remove(id: String) -> Result<Vec<ServerRow>, String> {
     herdr::servers::remove(&id)
 }
@@ -149,6 +154,7 @@ pub fn run() {
             api_request,
             servers_list,
             server_add,
+            ssh_aliases,
             server_remove,
             server_connect,
             attach_pane,

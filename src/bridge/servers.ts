@@ -15,3 +15,4 @@ export const addServer = (name: string, host: string) =>
   invoke<ServerRow[]>("server_add", { name, host });
 export const removeServer = (id: string) => invoke<ServerRow[]>("server_remove", { id });
 export const connectServer = (id: string) => invoke<string>("server_connect", { id });
+export const sshAliases = () => invoke<string[]>("ssh_aliases");

@@ -285,3 +285,33 @@ pub fn connect_remote(id: &str) -> Result<(), String> {
         remote.host
     ))
 }
+
+/// Host aliases from ~/.ssh/config (wildcard and negated patterns skipped).
+pub fn ssh_aliases() -> Vec<String> {
+    let Some(home) = std::env::var_os("HOME") else {
+        return Vec::new();
+    };
+    let path = PathBuf::from(home).join(".ssh/config");
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let line = line.trim();
+        let Some(rest) = line
+            .strip_prefix("Host ")
+            .or_else(|| line.strip_prefix("host "))
+        else {
+            continue;
+        };
+        for pattern in rest.split_whitespace() {
+            if pattern.contains(['*', '?']) || pattern.starts_with('!') {
+                continue;
+            }
+            if !out.contains(&pattern.to_string()) {
+                out.push(pattern.to_string());
+            }
+        }
+    }
+    out
+}
