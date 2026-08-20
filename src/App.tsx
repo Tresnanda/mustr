@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Sidebar } from "./components/sidebar/Sidebar";
 import { STATUS_LABEL } from "./components/status";
@@ -6,6 +6,7 @@ import { PaneGrid } from "./components/panes/PaneGrid";
 import { TabStrip } from "./components/tabs/TabStrip";
 import { dragHandlers } from "./components/DragRegion";
 import { TipProvider } from "./components/ui/Tip";
+import { Navigator } from "./components/command/Navigator";
 import { statusSince, useMustr } from "./state/store";
 import { lastNotified } from "./bridge/notify";
 import { connectServer } from "./bridge/servers";
@@ -54,6 +55,7 @@ function Toolbar() {
 }
 
 export default function App() {
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const {
     selectedPaneId,
     selectedTabId,
@@ -82,10 +84,20 @@ export default function App() {
       }
     };
     window.addEventListener("focus", onActivate);
+    // ⌘K anywhere — capture phase so focused terminals can't swallow it.
+    const onPalette = (e: KeyboardEvent) => {
+      if (e.metaKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        e.stopPropagation();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onPalette, true);
     return () => {
       clearInterval(fallback);
       clearInterval(clock);
       window.removeEventListener("focus", onActivate);
+      window.removeEventListener("keydown", onPalette, true);
       unlistenEvent.then((fn) => fn());
       unlistenConn.then((fn) => fn());
     };
@@ -158,6 +170,7 @@ export default function App() {
         </main>
       </div>
     </div>
+    <Navigator open={paletteOpen} onOpenChange={setPaletteOpen} />
     </TipProvider>
   );
 }
