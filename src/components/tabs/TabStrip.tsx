@@ -5,7 +5,7 @@
 import { useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Plus, X } from "@phosphor-icons/react";
+import { Plus } from "@phosphor-icons/react";
 import { closeTab, renameTab, type TabInfo } from "../../bridge/herdr";
 import { useMustr } from "../../state/store";
 import { MENU_CONTENT, MENU_ITEM, MENU_ITEM_DANGER, MENU_SEPARATOR, MENU_SHADOW, DIALOG_CONTENT, DIALOG_OVERLAY } from "../ui/menu";
@@ -70,7 +70,8 @@ export function TabStrip() {
   if (workspaceTabs.length === 0) return null;
 
   return (
-    <div className="flex h-9 shrink-0 items-center gap-1.5 px-3" role="tablist" aria-label="Tabs">
+    <div className="flex min-w-0 items-center gap-1" role="tablist" aria-label="Tabs">
+      <div className="flex max-w-[420px] items-center gap-[2px] overflow-x-auto rounded-[7px] bg-[rgb(0_0_0/0.22)] p-[2px]">
       {workspaceTabs.map((tab) => {
         const active = tab.tab_id === selectedTabId;
         const busy = tab.agent_status === "working";
@@ -78,20 +79,18 @@ export function TabStrip() {
         return (
           <ContextMenu.Root key={tab.tab_id}>
           <ContextMenu.Trigger asChild>
-          <div
-            className={`group relative flex h-[26px] min-w-[56px] max-w-[150px] flex-1 items-center justify-center rounded-[6px] transition-colors duration-100 ${
-              active
-                ? "bg-[rgb(255_255_255/0.16)]"
-                : "bg-[rgb(255_255_255/0.045)] hover:bg-[rgb(255_255_255/0.08)]"
-            }`}
-          >
             <button
               type="button"
               role="tab"
               aria-selected={active}
               onClick={() => selectTab(tab.tab_id)}
-              className={`flex h-full w-full items-center justify-center gap-1.5 px-2 text-[12.5px] tabular-nums outline-offset-[-2px] ${
-                active ? "font-medium text-text-primary" : "text-text-secondary"
+              onAuxClick={(e) => {
+                if (e.button === 1) setClosing(tab);
+              }}
+              className={`flex h-[22px] min-w-[40px] shrink-0 items-center justify-center gap-1.5 rounded-[5px] px-3 text-[12px] tabular-nums outline-offset-[-2px] transition-colors duration-100 ${
+                active
+                  ? "bg-[rgb(255_255_255/0.14)] font-medium text-text-primary shadow-[0_0_0_0.5px_rgb(255_255_255/0.07)]"
+                  : "text-text-secondary hover:bg-[rgb(255_255_255/0.05)]"
               }`}
             >
               {busy && (
@@ -100,17 +99,8 @@ export function TabStrip() {
               {blocked && (
                 <span className="size-[5px] shrink-0 rounded-full bg-status-blocked" aria-label="needs input" />
               )}
-              <span className="truncate">{tab.label}</span>
+              <span className="max-w-[96px] truncate">{tab.label}</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setClosing(tab)}
-              aria-label={`Close tab ${tab.label}`}
-              className="absolute right-0.5 flex size-5 items-center justify-center rounded-[5px] text-text-muted opacity-0 transition-opacity duration-100 hover:bg-hover hover:text-text-primary focus-visible:opacity-100 group-hover:opacity-100"
-            >
-              <X size={10} aria-hidden />
-            </button>
-          </div>
           </ContextMenu.Trigger>
           <ContextMenu.Portal>
             <ContextMenu.Content className={MENU_CONTENT} style={MENU_SHADOW}>
@@ -132,14 +122,15 @@ export function TabStrip() {
           </ContextMenu.Root>
         );
       })}
+      </div>
       <Tip label="New tab">
         <button
           type="button"
           onClick={() => void newTerminal()}
           aria-label="New tab"
-          className="flex h-[26px] w-8 shrink-0 items-center justify-center rounded-[6px] text-text-muted transition-colors duration-100 hover:bg-[rgb(255_255_255/0.08)] hover:text-text-primary active:scale-[0.96]"
+          className="flex size-[26px] shrink-0 items-center justify-center rounded-[6px] text-text-muted transition-colors duration-100 hover:bg-hover hover:text-text-primary active:scale-[0.96]"
         >
-          <Plus size={13} aria-hidden />
+          <Plus size={12} aria-hidden />
         </button>
       </Tip>
 

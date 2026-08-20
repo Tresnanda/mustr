@@ -23,30 +23,33 @@ function Toolbar() {
   return (
     <header
       {...dragHandlers()}
-      className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-border-subtle px-4"
+      className="grid h-[52px] shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-border-subtle px-4"
     >
-      {pane && (
-        <>
-          <span className="truncate text-[13px] font-semibold tracking-[-0.01em] text-text-primary">
-            {paneDisplayName(pane)}
-          </span>
-          {space && space !== paneDisplayName(pane) && (
-            <span className="truncate text-[12px] text-text-muted">{space}</span>
-          )}
-          <span className="flex-1" />
-          {showStatus && (
-            <span
-              className={`shrink-0 text-[12px] tabular-nums ${
-                pane.agent_status === "blocked" ? "font-medium text-status-blocked" : "text-text-muted"
-              }`}
-            >
-              {STATUS_LABEL[pane.agent_status]}
-              {age ? ` · ${age}` : ""}
+      <span className="flex min-w-0 items-center gap-2.5">
+        {pane && (
+          <>
+            <span className="truncate text-[13px] font-semibold tracking-[-0.01em] text-text-primary">
+              {paneDisplayName(pane)}
             </span>
-          )}
-        </>
-      )}
-      {!pane && <span className="flex-1" />}
+            {space && space !== paneDisplayName(pane) && (
+              <span className="truncate text-[12px] text-text-muted">{space}</span>
+            )}
+          </>
+        )}
+      </span>
+      <TabStrip />
+      <span className="flex min-w-0 items-center justify-end">
+        {showStatus && (
+          <span
+            className={`shrink-0 text-[12px] tabular-nums ${
+              pane!.agent_status === "blocked" ? "font-medium text-status-blocked" : "text-text-muted"
+            }`}
+          >
+            {STATUS_LABEL[pane!.agent_status]}
+            {age ? ` · ${age}` : ""}
+          </span>
+        )}
+      </span>
     </header>
   );
 }
@@ -88,7 +91,6 @@ export default function App() {
 
       <div className="flex min-w-0 flex-1 flex-col bg-content">
         <Toolbar />
-        <TabStrip />
         <main className="min-h-0 flex-1">
           {/* Pane/tab switching is high-frequency: instant, no transition. */}
           {selectedPaneId ? (
