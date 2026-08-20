@@ -268,27 +268,36 @@ export function Sidebar() {
           return (
             <div key={ws.workspace_id}>
               <SpaceMenu workspace={ws}>
-              <Row
-                onClick={() => setScope(scopeId === ws.workspace_id ? null : ws.workspace_id)}
-                selected={scopeId === ws.workspace_id}
-                label={`Space ${ws.label}, ${ws.pane_count} panes`}
-              >
-                <Folder size={15} className="shrink-0 text-text-secondary" aria-hidden />
-                <span className="min-w-0 flex-1 truncate text-[13px] text-text-primary">
-                  {ws.label}
-                </span>
-                {(() => {
-                  const cwd = panes.find((p) => p.workspace_id === ws.workspace_id)?.cwd;
-                  const info = cwd ? git[cwd] : undefined;
-                  return info ? (
-                    <span className="max-w-[88px] truncate font-mono text-[10.5px] text-text-muted">
-                      {info.branch}
-                      {info.dirty ? "*" : ""}
+              {(() => {
+                const cwd = panes.find((p) => p.workspace_id === ws.workspace_id)?.cwd;
+                const info = cwd ? git[cwd] : undefined;
+                return (
+                  <Row
+                    onClick={() => setScope(scopeId === ws.workspace_id ? null : ws.workspace_id)}
+                    selected={scopeId === ws.workspace_id}
+                    label={`Space ${ws.label}, ${ws.pane_count} panes${info ? `, on ${info.branch}` : ""}`}
+                    tall={Boolean(info)}
+                  >
+                    <Folder size={15} className="shrink-0 text-text-secondary" aria-hidden />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline gap-2">
+                        <span className="min-w-0 flex-1 truncate text-[13px] text-text-primary">
+                          {ws.label}
+                        </span>
+                        <span className="shrink-0 text-[12px] tabular-nums text-text-muted">
+                          {ws.pane_count}
+                        </span>
+                      </span>
+                      {info && (
+                        <span className="mt-px block truncate font-mono text-[11px] leading-tight text-text-muted">
+                          {info.branch}
+                          {info.dirty ? "*" : ""}
+                        </span>
+                      )}
                     </span>
-                  ) : null;
-                })()}
-                <span className="text-[12px] tabular-nums text-text-muted">{ws.pane_count}</span>
-              </Row>
+                  </Row>
+                );
+              })()}
               </SpaceMenu>
               {terminals.map((pane) => {
                 const k = cwdFolder(pane.cwd) ?? pane.pane_id;
