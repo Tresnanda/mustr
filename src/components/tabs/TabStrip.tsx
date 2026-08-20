@@ -70,8 +70,11 @@ export function TabStrip() {
   if (workspaceTabs.length === 0) return null;
 
   return (
-    <div className="flex min-w-0 items-center gap-1" role="tablist" aria-label="Tabs">
-      <div className="flex max-w-[420px] items-center gap-[2px] overflow-x-auto rounded-[7px] bg-[rgb(0_0_0/0.22)] p-[2px]">
+    <div
+      className="flex h-[34px] shrink-0 items-center gap-0.5 overflow-x-auto px-4"
+      role="tablist"
+      aria-label="Tabs"
+    >
       {workspaceTabs.map((tab) => {
         const active = tab.tab_id === selectedTabId;
         const busy = tab.agent_status === "working";
@@ -87,10 +90,10 @@ export function TabStrip() {
               onAuxClick={(e) => {
                 if (e.button === 1) setClosing(tab);
               }}
-              className={`flex h-[22px] min-w-[40px] shrink-0 items-center justify-center gap-1.5 rounded-[5px] px-3 text-[12px] tabular-nums outline-offset-[-2px] transition-colors duration-100 ${
+              className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] tabular-nums outline-offset-[-2px] transition-colors duration-100 ${
                 active
-                  ? "bg-[rgb(255_255_255/0.14)] font-medium text-text-primary shadow-[0_0_0_0.5px_rgb(255_255_255/0.07)]"
-                  : "text-text-secondary hover:bg-[rgb(255_255_255/0.05)]"
+                  ? "bg-[rgb(255_255_255/0.1)] font-medium text-text-primary"
+                  : "text-text-muted hover:text-text-secondary"
               }`}
             >
               {busy && (
@@ -122,13 +125,12 @@ export function TabStrip() {
           </ContextMenu.Root>
         );
       })}
-      </div>
       <Tip label="New tab">
         <button
           type="button"
           onClick={() => void newTerminal()}
           aria-label="New tab"
-          className="flex size-[26px] shrink-0 items-center justify-center rounded-[6px] text-text-muted transition-colors duration-100 hover:bg-hover hover:text-text-primary active:scale-[0.96]"
+          className="ml-0.5 flex size-6 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors duration-100 hover:bg-hover hover:text-text-primary active:scale-[0.96]"
         >
           <Plus size={12} aria-hidden />
         </button>
