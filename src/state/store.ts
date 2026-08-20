@@ -48,8 +48,13 @@ interface MustrState {
   now: number;
   termFontSize: number;
   findOpen: boolean;
+  notifyBlocked: boolean;
+  notifyDone: boolean;
+  appearance: "glass" | "solid";
   setTermFontSize: (px: number) => void;
   setFindOpen: (open: boolean) => void;
+  setNotifyPref: (kind: "blocked" | "done", on: boolean) => void;
+  setAppearance: (a: "glass" | "solid") => void;
   servers: ServerRow[];
   activeServerId: string;
   /** Server id currently connecting, for pending UI. */
@@ -100,7 +105,13 @@ function trackStatuses(snapshot: SessionSnapshot, hasLoaded: boolean) {
       statusSince.set(pane.pane_id, now);
     }
     if (hasLoaded && prev && prev !== pane.agent_status) {
-      notifyStatusChange(pane.agent_status, paneDisplayName(pane), pane.agent, pane.pane_id);
+      const st = useMustr.getState();
+      const wanted =
+        (pane.agent_status === "blocked" && st.notifyBlocked) ||
+        (pane.agent_status === "done" && st.notifyDone);
+      if (wanted) {
+        notifyStatusChange(pane.agent_status, paneDisplayName(pane), pane.agent, pane.pane_id);
+      }
     }
   }
   lastStatus = new Map(snapshot.panes.map((p) => [p.pane_id, p.agent_status]));
@@ -125,6 +136,18 @@ export const useMustr = create<MustrState>((set, get) => ({
   now: Date.now(),
   termFontSize: Number(localStorage.getItem("mustr:termFontSize")) || 13,
   findOpen: false,
+  notifyBlocked: localStorage.getItem("mustr:notifyBlocked") !== "off",
+  notifyDone: localStorage.getItem("mustr:notifyDone") !== "off",
+  appearance: (localStorage.getItem("mustr:appearance") as "glass" | "solid") || "glass",
+  setNotifyPref: (kind, on) => {
+    localStorage.setItem(kind === "blocked" ? "mustr:notifyBlocked" : "mustr:notifyDone", on ? "on" : "off");
+    set(kind === "blocked" ? { notifyBlocked: on } : { notifyDone: on });
+  },
+  setAppearance: (appearance) => {
+    localStorage.setItem("mustr:appearance", appearance);
+    document.documentElement.dataset.appearance = appearance;
+    set({ appearance });
+  },
   setTermFontSize: (px) => {
     const clamped = Math.min(22, Math.max(10, px));
     localStorage.setItem("mustr:termFontSize", String(clamped));

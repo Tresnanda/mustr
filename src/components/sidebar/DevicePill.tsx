@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Dialog from "@radix-ui/react-dialog";
-import { CaretUpDown, Check, CircleNotch, Desktop, HardDrives, Plus } from "@phosphor-icons/react";
+import { CaretUpDown, Check, CircleNotch, Desktop, GearSix, HardDrives, Plus } from "@phosphor-icons/react";
 import { closeAutoFocus } from "../../lib/modality";
 import { useMustr } from "../../state/store";
 import { addServer, sshAliases, type ServerRow } from "../../bridge/servers";
@@ -19,6 +19,8 @@ import {
   MENU_SHADOW,
 } from "../ui/menu";
 import { removeServer } from "../../bridge/servers";
+import { SettingsDialog } from "../settings/SettingsDialog";
+import { Tip } from "../ui/Tip";
 
 function DeviceRow({ server }: { server: ServerRow }) {
   const { switchServer, connectingId, loadServers } = useMustr();
@@ -227,6 +229,18 @@ function AddDeviceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
 export function DevicePill() {
   const { server, connected, servers, activeServerId, connectError, loadServers } = useMustr();
   const [adding, setAdding] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey && !e.shiftKey && e.key === ",") {
+        e.preventDefault();
+        setSettingsOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
 
   useEffect(() => {
     void loadServers();
@@ -235,7 +249,8 @@ export function DevicePill() {
   const active = servers.find((s) => s.id === activeServerId);
 
   return (
-    <div className="shrink-0 px-3 pb-3 pt-1">
+    <div className="flex shrink-0 items-center gap-1 px-3 pb-3 pt-1">
+      <div className="min-w-0 flex-1">
       <Dropdown.Root>
         <Dropdown.Trigger asChild>
           <button
@@ -305,7 +320,20 @@ export function DevicePill() {
         </Dropdown.Portal>
       </Dropdown.Root>
 
+      </div>
+      <Tip label="Settings (⌘,)">
+        <button
+          type="button"
+          aria-label="Settings"
+          onClick={() => setSettingsOpen(true)}
+          className="flex size-7 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors duration-100 hover:bg-hover hover:text-text-primary active:scale-[0.94]"
+        >
+          <GearSix size={15} aria-hidden />
+        </button>
+      </Tip>
+
       <AddDeviceDialog open={adding} onOpenChange={setAdding} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 }

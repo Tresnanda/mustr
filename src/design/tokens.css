@@ -62,3 +62,9 @@
     --surface-sidebar: #252525;
   }
 }
+
+/* Appearance: Solid — same ink, no glass. */
+:root[data-appearance="solid"] {
+  --surface-content: #1e1e1e;
+  --surface-sidebar: #252525;
+}

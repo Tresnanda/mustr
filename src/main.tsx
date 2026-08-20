@@ -8,6 +8,9 @@ import "./index.css";
 // call preventDefault on their triggers before this listener fires.
 window.addEventListener("contextmenu", (e) => e.preventDefault());
 
+const appearance = localStorage.getItem("mustr:appearance");
+if (appearance) document.documentElement.dataset.appearance = appearance;
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>
