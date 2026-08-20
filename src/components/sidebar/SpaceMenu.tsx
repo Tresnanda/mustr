@@ -5,6 +5,7 @@ import { useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Dialog from "@radix-ui/react-dialog";
 import { closeWorkspace, createTab, renameWorkspace, type WorkspaceInfo } from "../../bridge/herdr";
+import { closeAutoFocus } from "../../lib/modality";
 import { useMustr } from "../../state/store";
 import { MENU_CONTENT, MENU_ITEM, MENU_ITEM_DANGER, MENU_SEPARATOR, MENU_SHADOW, DIALOG_CONTENT, DIALOG_OVERLAY } from "../ui/menu";
 import { RenameDialog } from "../ui/RenameDialog";
@@ -29,7 +30,7 @@ export function SpaceMenu({
       <ContextMenu.Root>
         <ContextMenu.Trigger asChild>{children}</ContextMenu.Trigger>
         <ContextMenu.Portal>
-          <ContextMenu.Content className={MENU_CONTENT} style={MENU_SHADOW}>
+          <ContextMenu.Content onCloseAutoFocus={closeAutoFocus} className={MENU_CONTENT} style={MENU_SHADOW}>
             <ContextMenu.Item
               className={`${MENU_ITEM} text-text-primary`}
               onSelect={() => {

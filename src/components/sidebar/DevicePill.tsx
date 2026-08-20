@@ -7,6 +7,7 @@ import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Dialog from "@radix-ui/react-dialog";
 import { CaretUpDown, Check, CircleNotch, Desktop, HardDrives, Plus } from "@phosphor-icons/react";
+import { closeAutoFocus } from "../../lib/modality";
 import { useMustr } from "../../state/store";
 import { addServer, sshAliases, type ServerRow } from "../../bridge/servers";
 import {
@@ -272,6 +273,7 @@ export function DevicePill() {
 
         <Dropdown.Portal>
           <Dropdown.Content
+            onCloseAutoFocus={closeAutoFocus}
             side="top"
             align="start"
             sideOffset={6}

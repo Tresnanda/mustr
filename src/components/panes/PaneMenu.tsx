@@ -6,6 +6,7 @@ import { useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Dialog from "@radix-ui/react-dialog";
 import { closePane, focusPane, splitPane, zoomPane } from "../../bridge/herdr";
+import { closeAutoFocus } from "../../lib/modality";
 import { useMustr } from "../../state/store";
 import { cwdFolder, prettyAgent } from "../../lib/names";
 import { MENU_CONTENT, MENU_ITEM as ITEM, MENU_ITEM_DANGER, MENU_SEPARATOR, MENU_SHADOW, DIALOG_CONTENT, DIALOG_OVERLAY } from "../ui/menu";
@@ -36,6 +37,7 @@ export function PaneMenu({ paneId, children }: { paneId: string; children: React
         <ContextMenu.Trigger asChild>{children}</ContextMenu.Trigger>
         <ContextMenu.Portal>
           <ContextMenu.Content
+            onCloseAutoFocus={closeAutoFocus}
             className={MENU_CONTENT}
             style={MENU_SHADOW}
           >
