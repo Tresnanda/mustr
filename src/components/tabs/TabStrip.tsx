@@ -8,7 +8,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Plus, X } from "@phosphor-icons/react";
 import { closeTab, renameTab, type TabInfo } from "../../bridge/herdr";
 import { useMustr } from "../../state/store";
-import { MENU_CONTENT, MENU_ITEM, MENU_ITEM_DANGER, MENU_SEPARATOR, MENU_SHADOW } from "../ui/menu";
+import { MENU_CONTENT, MENU_ITEM, MENU_ITEM_DANGER, MENU_SEPARATOR, MENU_SHADOW, DIALOG_CONTENT, DIALOG_OVERLAY } from "../ui/menu";
 import { RenameDialog } from "../ui/RenameDialog";
 import { Tip } from "../ui/Tip";
 
@@ -20,20 +20,19 @@ function CloseTabDialog({
   onDone: () => void;
 }) {
   const refresh = useMustr((s) => s.refresh);
-  const terminals = tab.pane_count === 1 ? "its terminal" : `its ${tab.pane_count} terminals`;
+  const consequence =
+    tab.pane_count === 1
+      ? "Its terminal will close and anything it's running will end."
+      : `Its ${tab.pane_count} terminals will close and anything they're running will end.`;
   return (
     <Dialog.Portal>
-      <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40" />
-      <Dialog.Content
-        className="fixed left-1/2 top-1/2 z-50 w-[340px] -translate-x-1/2 -translate-y-1/2 rounded-xl bg-sidebar p-5"
-        style={{ boxShadow: "var(--shadow-popover)" }}
-        onEscapeKeyDown={onDone}
-      >
+      <Dialog.Overlay className={DIALOG_OVERLAY} />
+      <Dialog.Content className={DIALOG_CONTENT} style={MENU_SHADOW} onEscapeKeyDown={onDone}>
         <Dialog.Title className="text-[13px] font-semibold text-text-primary">
           Close tab {tab.label}?
         </Dialog.Title>
         <Dialog.Description className="mt-1 text-[13px] leading-snug text-text-secondary">
-          Anything running in {terminals} will end.
+          {consequence}
         </Dialog.Description>
         <div className="mt-4 flex justify-end gap-2">
           <Dialog.Close asChild>

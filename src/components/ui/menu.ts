@@ -20,3 +20,13 @@ export const MENU_SEPARATOR = "mx-[9px] my-[5px] h-px bg-[rgb(255_255_255/0.07)]
 export const MENU_SHADOW = {
   boxShadow: "0 0 0 0.5px rgb(255 255 255 / 0.09), 0 10px 34px rgb(0 0 0 / 0.38)",
 } as const;
+
+/* ---- Dialogs: near-opaque material — content must never bleed through ---- */
+
+export const DIALOG_OVERLAY = "fixed inset-0 z-40 bg-black/45";
+
+export const DIALOG_CONTENT =
+  "fixed left-1/2 top-1/2 z-50 w-[340px] -translate-x-1/2 -translate-y-1/2 " +
+  "rounded-xl bg-[rgb(44_44_44/0.93)] p-5 backdrop-blur-2xl " +
+  "duration-150 ease-out data-[state=open]:animate-in data-[state=open]:fade-in " +
+  "data-[state=open]:zoom-in-95";

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { MENU_SHADOW } from "./menu";
+import { DIALOG_CONTENT, DIALOG_OVERLAY, MENU_SHADOW } from "./menu";
 
 export function RenameDialog({
   open,
@@ -34,11 +34,8 @@ export function RenameDialog({
       }}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40" />
-        <Dialog.Content
-          className="fixed left-1/2 top-1/2 z-50 w-[320px] -translate-x-1/2 -translate-y-1/2 rounded-xl bg-sidebar p-5"
-          style={MENU_SHADOW}
-        >
+        <Dialog.Overlay className={DIALOG_OVERLAY} />
+        <Dialog.Content className={DIALOG_CONTENT} style={MENU_SHADOW}>
           <Dialog.Title className="text-[13px] font-semibold text-text-primary">{title}</Dialog.Title>
           <input
             autoFocus

@@ -7,8 +7,8 @@ import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Dialog from "@radix-ui/react-dialog";
 import { closePane, focusPane, splitPane } from "../../bridge/herdr";
 import { useMustr } from "../../state/store";
-import { paneDisplayName } from "../../lib/names";
-import { MENU_CONTENT, MENU_ITEM as ITEM, MENU_ITEM_DANGER, MENU_SEPARATOR, MENU_SHADOW } from "../ui/menu";
+import { cwdFolder, prettyAgent } from "../../lib/names";
+import { MENU_CONTENT, MENU_ITEM as ITEM, MENU_ITEM_DANGER, MENU_SEPARATOR, MENU_SHADOW, DIALOG_CONTENT, DIALOG_OVERLAY } from "../ui/menu";
 
 export function PaneMenu({ paneId, children }: { paneId: string; children: React.ReactNode }) {
   const { refresh, selectPane, panes } = useMustr();
@@ -50,16 +50,15 @@ export function PaneMenu({ paneId, children }: { paneId: string; children: React
 
       <Dialog.Root open={confirmClose} onOpenChange={setConfirmClose}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40" />
-          <Dialog.Content
-            className="fixed left-1/2 top-1/2 z-50 w-[340px] -translate-x-1/2 -translate-y-1/2 rounded-xl bg-sidebar p-5"
-            style={{ boxShadow: "var(--shadow-popover)" }}
-          >
+          <Dialog.Overlay className={DIALOG_OVERLAY} />
+          <Dialog.Content className={DIALOG_CONTENT} style={MENU_SHADOW}>
             <Dialog.Title className="text-[13px] font-semibold text-text-primary">
-              Close {pane ? paneDisplayName(pane) : "this terminal"}?
+              Close this terminal?
             </Dialog.Title>
             <Dialog.Description className="mt-1 text-[13px] leading-snug text-text-secondary">
-              Anything running in it will end.
+              {pane?.agent
+                ? `${prettyAgent(pane.agent)} in ${cwdFolder(pane.cwd)} will end, along with anything it's running.`
+                : `The shell in ${pane ? cwdFolder(pane.cwd) : "this pane"} will end, along with anything it's running.`}
             </Dialog.Description>
             <div className="mt-4 flex justify-end gap-2">
               <Dialog.Close asChild>
