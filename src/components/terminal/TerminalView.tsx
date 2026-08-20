@@ -8,7 +8,9 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
+import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useMustr } from "../../state/store";
 import {
   attachPane,
@@ -90,6 +92,12 @@ export function TerminalView({ paneId, onClosed }: Props) {
     term.loadAddon(fit);
     const search = new SearchAddon();
     term.loadAddon(search);
+    // Links: ⌘-click opens (terminal convention); hover underlines.
+    term.loadAddon(
+      new WebLinksAddon((event, uri) => {
+        if (event.metaKey) void openUrl(uri);
+      }),
+    );
     termRef.current = term;
     fitRef.current = fit;
     searchRef.current = search;
@@ -129,6 +137,36 @@ export function TerminalView({ paneId, onClosed }: Props) {
       );
       return { col, row };
     };
+
+    // Mouse-tracking apps (Claude Code's UI, htop, …) expect real clicks.
+    // Forward left/middle press, drag, and release as SGR sequences when the
+    // app owns the mouse. Shift bypasses forwarding so text selection always
+    // works (the same escape hatch real terminals use). Right-click stays
+    // ours (context menu).
+    let buttonHeld = -1;
+    const sgrMouse = (btn: number, event: MouseEvent, release: boolean, motion = false) => {
+      const { col, row } = cellAt(event as unknown as WheelEvent);
+      const code = btn + (motion ? 32 : 0);
+      const seq = `\x1b[<${code};${col};${row}${release ? "m" : "M"}`;
+      paneInput(attachId, new TextEncoder().encode(seq)).catch(() => {});
+    };
+    const onMouseDown = (event: MouseEvent) => {
+      if (!mouseCaptured || event.shiftKey || event.button === 2) return;
+      buttonHeld = event.button === 1 ? 1 : 0;
+      sgrMouse(buttonHeld, event, false);
+    };
+    const onMouseMove = (event: MouseEvent) => {
+      if (!mouseCaptured || buttonHeld < 0) return;
+      sgrMouse(buttonHeld, event, false, true);
+    };
+    const onMouseUp = (event: MouseEvent) => {
+      if (!mouseCaptured || buttonHeld < 0) return;
+      sgrMouse(buttonHeld, event, true);
+      buttonHeld = -1;
+    };
+    host.addEventListener("mousedown", onMouseDown);
+    host.addEventListener("mousemove", onMouseMove);
+    host.addEventListener("mouseup", onMouseUp);
 
     // Capture phase: beat xterm's viewport to the event. Trackpads flood
     // small-delta events, so accumulate and emit one line per LINE_PX of
@@ -205,6 +243,9 @@ export function TerminalView({ paneId, onClosed }: Props) {
       if (retryTimer) clearTimeout(retryTimer);
       observer.disconnect();
       host.removeEventListener("wheel", onWheel, { capture: true });
+      host.removeEventListener("mousedown", onMouseDown);
+      host.removeEventListener("mousemove", onMouseMove);
+      host.removeEventListener("mouseup", onMouseUp);
       detachPane(attachId).catch(() => {});
       termRef.current = null;
       fitRef.current = null;

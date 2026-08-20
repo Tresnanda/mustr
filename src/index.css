@@ -88,3 +88,9 @@ body {
 .term-host .xterm-viewport {
   background-color: transparent !important;
 }
+/* When the app in the pane owns the mouse, clicks act — show an arrow,
+   not the text I-beam. */
+.term-mouse-owned .xterm,
+.term-mouse-owned .xterm .xterm-screen {
+  cursor: default !important;
+}
