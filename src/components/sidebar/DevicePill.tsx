@@ -76,10 +76,23 @@ function AddDeviceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
   const [host, setHost] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [aliases, setAliases] = useState<string[]>([]);
+  const [suggesting, setSuggesting] = useState(false);
+  const [activeIdx, setActiveIdx] = useState(-1);
 
   useEffect(() => {
     if (open) void sshAliases().then(setAliases).catch(() => setAliases([]));
   }, [open]);
+
+  const matches = aliases.filter(
+    (a) => !host.trim() || a.toLowerCase().includes(host.trim().toLowerCase()),
+  );
+
+  const pick = (alias: string) => {
+    setHost(alias);
+    if (!name.trim()) setName(alias);
+    setSuggesting(false);
+    setActiveIdx(-1);
+  };
 
   const save = async () => {
     try {
@@ -120,43 +133,70 @@ function AddDeviceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
                 className={`${FIELD} mt-1.5`}
               />
             </label>
-            <label className="block text-[12px] font-medium text-text-secondary">
+            <label className="relative block text-[12px] font-medium text-text-secondary">
               SSH destination
               <input
                 value={host}
-                onChange={(e) => setHost(e.target.value)}
+                role="combobox"
+                aria-expanded={suggesting && matches.length > 0}
+                aria-controls="ssh-alias-listbox"
+                aria-autocomplete="list"
+                onChange={(e) => {
+                  setHost(e.target.value);
+                  setSuggesting(true);
+                  setActiveIdx(-1);
+                }}
+                onFocus={() => setSuggesting(true)}
+                onBlur={() => setTimeout(() => setSuggesting(false), 120)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") void save();
+                  const open = suggesting && matches.length > 0;
+                  if (e.key === "ArrowDown" && open) {
+                    e.preventDefault();
+                    setActiveIdx((i) => (i + 1) % matches.length);
+                  } else if (e.key === "ArrowUp" && open) {
+                    e.preventDefault();
+                    setActiveIdx((i) => (i <= 0 ? matches.length - 1 : i - 1));
+                  } else if (e.key === "Enter") {
+                    if (open && activeIdx >= 0) pick(matches[activeIdx]);
+                    else void save();
+                  } else if (e.key === "Escape" && open) {
+                    e.stopPropagation();
+                    setSuggesting(false);
+                  }
                 }}
                 placeholder="name@host or config alias"
                 style={{ outline: "none" }}
                 className={`${FIELD} mt-1.5 font-mono text-[12px]`}
               />
-            </label>
-            {aliases.length > 0 && (
-              <div>
-                <p className="text-[12px] font-medium text-text-secondary">From your SSH config</p>
-                <div tabIndex={-1} style={{ outline: "none" }} className="mt-1.5 flex max-h-[92px] flex-wrap gap-1.5 overflow-y-auto pb-0.5">
-                  {aliases.map((alias) => (
-                    <button
-                      key={alias}
-                      type="button"
-                      onClick={() => {
-                        setHost(alias);
-                        if (!name.trim()) setName(alias);
-                      }}
-                      className={`rounded-md px-2 py-1 font-mono text-[11.5px] transition-colors duration-100 active:scale-[0.97] ${
-                        host === alias
-                          ? "bg-selection text-text-primary"
-                          : "bg-[rgb(255_255_255/0.06)] text-text-secondary hover:bg-[rgb(255_255_255/0.1)] hover:text-text-primary"
-                      }`}
-                    >
-                      {alias}
-                    </button>
+              {suggesting && matches.length > 0 && (
+                <ul
+                  id="ssh-alias-listbox"
+                  role="listbox"
+                  aria-label="Hosts from your SSH config"
+                  className="absolute inset-x-0 top-full z-10 mt-1 max-h-[148px] overflow-y-auto rounded-[9px] bg-[rgb(50_50_50/0.97)] p-1 backdrop-blur-xl"
+                  style={{ boxShadow: "0 0 0 0.5px rgb(255 255 255 / 0.09), 0 8px 24px rgb(0 0 0 / 0.4)" }}
+                >
+                  {matches.map((alias, i) => (
+                    <li key={alias} role="option" aria-selected={i === activeIdx}>
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        onMouseDown={(e) => {
+                          e.preventDefault(); // beat the input blur
+                          pick(alias);
+                        }}
+                        onMouseEnter={() => setActiveIdx(i)}
+                        className={`flex h-[26px] w-full items-center rounded-[6px] px-2 text-left font-mono text-[12px] ${
+                          i === activeIdx ? "bg-[rgb(255_255_255/0.1)] text-text-primary" : "text-text-secondary"
+                        }`}
+                      >
+                        {alias}
+                      </button>
+                    </li>
                   ))}
-                </div>
-              </div>
-            )}
+                </ul>
+              )}
+            </label>
             {error && <p className="text-[12px] leading-snug text-danger">{error}</p>}
           </div>
 
