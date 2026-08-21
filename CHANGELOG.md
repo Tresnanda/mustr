@@ -3,6 +3,30 @@
 All notable changes to Mustr. Versions are semver; each release states its
 herdr protocol compatibility.
 
+## 0.1.6 — 2026-08-22
+
+Compatible with **herdr 0.8.0 / protocol 19 and 0.8.2 / protocol 20**.
+
+Renderer CPU/GPU footprint:
+- The agent working-indicator no longer animates an SVG blur filter through
+  the glass — that re-rasterized the backdrop every frame and pinned the
+  WebKit GPU process (~17% per working agent). It's now a transform-only
+  spinner driven by a CSS keyframe, which the compositor rotates for the
+  same cost as a static dot: GPU process ~17% → ~3% while an agent works,
+  with no loss of live feedback. (Drops the thinking-orbs dependency.)
+- Terminals blink the cursor only on the focused pane, so idle panes stop
+  repainting — and stop waking the GPU — closer to the ~0% idle bar in
+  docs/perf-protocol.md.
+
+Agent-status accuracy:
+- Sub-second working↔idle flaps from herdr are coalesced (500ms settle), so
+  the status-ordered agent list no longer thrashes its row order and the
+  spinner no longer flashes for momentary blips.
+- A pane left showing "working" after herdr dropped its resting-state push
+  (attach clients don't receive every signal) now self-heals within ~20s
+  via a cheap staleness check, instead of waiting for the 120s reconcile.
+  The check is a no-op when the app is idle, so idle power is unchanged.
+
 ## 0.1.5 — 2026-08-21
 
 Compatible with **herdr 0.8.0 / protocol 19 and 0.8.2 / protocol 20**.
