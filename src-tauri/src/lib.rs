@@ -18,20 +18,37 @@ use herdr::term::{Attachment, TermEvent};
 struct Attachments(Mutex<HashMap<String, Arc<Attachment>>>);
 
 /// Generic JSON API passthrough: the frontend calls herdr methods directly
-/// (`ping`, `pane.list`, `session.snapshot`, `pane.split`, ...). Each
-/// window passes the server id it is bound to.
+/// (`ping`, `pane.list`, `session.snapshot`, `pane.split`, ...).
+/// Tauri v2 runs sync commands on the main/UI thread (wry delivers IPC in
+/// the webview delegate), so anything that touches the daemon socket or
+/// spawns a process MUST be async + spawn_blocking to keep the UI thread
+/// free (see issue #1 stack samples).
 #[tauri::command]
-fn api_request(server: String, method: String, params: Option<Value>) -> Result<Value, String> {
-    herdr::api::request(&server, &method, params.unwrap_or_else(|| serde_json::json!({})))
+async fn api_request(
+    server: String,
+    method: String,
+    params: Option<Value>,
+) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        herdr::api::request(&server, &method, params.unwrap_or_else(|| serde_json::json!({})))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn git_summaries(cwds: Vec<String>) -> std::collections::HashMap<String, herdr::gitinfo::GitSummary> {
-    herdr::gitinfo::summaries(cwds)
+async fn git_summaries(
+    cwds: Vec<String>,
+) -> Result<std::collections::HashMap<String, herdr::gitinfo::GitSummary>, String> {
+    tauri::async_runtime::spawn_blocking(move || Ok(herdr::gitinfo::summaries(cwds)))
+        .await
+        .map_err(|e| e.to_string())?
 }
+
 
 /// Lists directories on a saved SSH server for the new-space browser.
-/// Blocking is fine: non-async commands run off the main thread.
+/// Sync command → runs on the main thread; the frontend only calls this
+/// from explicit dialogs, never on a timer.
 #[tauri::command]
 fn remote_list_dirs(
     server: String,
@@ -212,6 +229,7 @@ pub fn run() {
             });
             herdr::servers::spawn_supervisor(app.handle().clone());
             herdr::events::ensure_stream(app.handle().clone(), "local".into());
+            herdr::gitinfo::init(app.handle().clone());
             #[cfg(target_os = "macos")]
             {
                 use tauri::window::{Effect, EffectsBuilder};

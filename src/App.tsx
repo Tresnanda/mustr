@@ -17,8 +17,8 @@ import { BTN, BTN_PRIMARY } from "./components/ui/menu";
 import { MustrMark } from "./components/ui/MustrMark";
 import { useMustr } from "./state/store";
 import { lastNotified } from "./bridge/notify";
-import { connectServer } from "./bridge/servers";
-import { splitPane, zoomPane, focusPane } from "./bridge/herdr";
+import { connectServer, type GitSummary } from "./bridge/servers";
+import { isPaneRow, splitPane, zoomPane, focusPane } from "./bridge/herdr";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { tweenFast } from "./design/motion";
 
@@ -149,9 +149,24 @@ export default function App() {
     // Events are tagged with the server they came from; this window only
     // mirrors its own. Any conn change refreshes the registry so the
     // session switcher stays honest across windows.
-    const unlistenEvent = listen<{ server: string }>("herdr-event", (e) => {
-      if (e.payload.server === useMustr.getState().activeServerId) scheduleRefresh();
+    const unlistenEvent = listen<{
+      server: string;
+      event?: { event?: string; data?: { pane?: unknown } };
+    }>("herdr-event", (e) => {
+      if (e.payload.server !== useMustr.getState().activeServerId) return;
+      // pane.updated carries the full row — merge it with zero IPC.
+      // Every other topic is structural and re-seeds from a snapshot.
+      const pane = e.payload.event?.data?.pane;
+      if (e.payload.event?.event === "pane_updated" && isPaneRow(pane)) {
+        useMustr.getState().applyPaneUpdate(pane);
+      } else {
+        scheduleRefresh();
+      }
     });
+    const unlistenGit = listen<{ summaries: Record<string, GitSummary> }>(
+      "herdr-git",
+      (e) => useMustr.getState().mergeGit(e.payload.summaries),
+    );
     const unlistenConn = listen<{ server: string; connected: boolean }>("herdr-conn", (e) => {
       const st = useMustr.getState();
       if (e.payload.server === st.activeServerId) {
@@ -162,8 +177,18 @@ export default function App() {
       }
       void st.loadServers();
     });
-    const fallback = setInterval(refresh, 15000);
-    const clock = setInterval(tick, 30000);
+    // Drift safety net, not a poll: structural events keep state fresh,
+    // this only catches anything the pushed rows can't express.
+    const reconcile = setInterval(() => {
+      if (!document.hidden) void useMustr.getState().refresh();
+    }, 120_000);
+    const clock = setInterval(() => {
+      if (!document.hidden) tick();
+    }, 30000);
+    const onVisibility = () => {
+      if (!document.hidden) useMustr.getState().onVisible();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     // Clicking a macOS notification activates the app; route that activation
     // to the notified pane when it happens within half a minute.
     const onActivate = () => {
@@ -265,11 +290,13 @@ export default function App() {
     };
     window.addEventListener("keydown", onShortcut, true);
     return () => {
-      clearInterval(fallback);
+      clearInterval(reconcile);
       clearInterval(clock);
       window.removeEventListener("focus", onActivate);
       window.removeEventListener("keydown", onShortcut, true);
+      document.removeEventListener("visibilitychange", onVisibility);
       unlistenEvent.then((fn) => fn());
+      unlistenGit.then((fn) => fn());
       unlistenConn.then((fn) => fn());
     };
   }, [refresh, scheduleRefresh, setConnected, tick]);

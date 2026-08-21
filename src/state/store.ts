@@ -107,6 +107,12 @@ interface MustrState {
   git: Record<string, GitSummary>;
   refresh: () => Promise<void>;
   scheduleRefresh: () => void;
+  /** Merge one pushed pane row (herdr pane.updated) into the mirror. */
+  applyPaneUpdate: (pane: PaneInfo) => void;
+  /** Merge a pushed delta from the backend git watcher. */
+  mergeGit: (summaries: Record<string, GitSummary>) => void;
+  /** Window became visible again; flush deferred refreshes. */
+  onVisible: () => void;
   setConnected: (connected: boolean) => void;
   selectPane: (paneId: string) => void;
   selectTab: (tabId: string) => void;
@@ -132,9 +138,24 @@ function touchVisited(visited: string[], tabId: string | null): string[] {
   return [tabId, ...visited.filter((t) => t !== tabId)].slice(0, WARM_TABS);
 }
 
-let refreshTimer: ReturnType<typeof setTimeout> | null = null;
-let lastGitFetch = 0;
+let refreshTimer: number | null = null;
+let refreshPending = false;
 let lastStatus = new Map<string, AgentStatus>();
+let lastGitCwds: string[] | null = null;
+
+/** Local only: fetch the backend git cache when the set of pane cwds
+    changes. The backend keeps entries fresh via FSEvents pushes
+    (`herdr-git`); nothing here runs on a timer. */
+function maybeFetchGit(panes: PaneInfo[], activeServerId: string) {
+  if (activeServerId !== "local") return;
+  const cwds = [...new Set(panes.map((p) => p.cwd).filter(Boolean))].sort();
+  const prev = lastGitCwds;
+  if (prev && prev.length === cwds.length && prev.every((c, i) => c === cwds[i])) return;
+  lastGitCwds = cwds;
+  void gitSummaries(cwds)
+    .then((git) => useMustr.setState({ git }))
+    .catch(() => {});
+}
 
 async function fetchTree(tabId: string | null): Promise<LayoutNode | null> {
   if (!tabId) return null;
@@ -145,24 +166,31 @@ async function fetchTree(tabId: string | null): Promise<LayoutNode | null> {
   }
 }
 
-function trackStatuses(snapshot: SessionSnapshot, hasLoaded: boolean) {
+/** Status transitions for one pane: timestamp them, and fire the
+    blocked/done notification when wanted. Shared by the snapshot path
+    and the pushed pane.updated path so notifications behave identically. */
+function trackPaneStatus(pane: PaneInfo, hasLoaded: boolean) {
   const now = Date.now();
-  for (const pane of snapshot.panes) {
-    const prev = lastStatus.get(pane.pane_id);
-    if (prev === undefined || prev !== pane.agent_status) {
-      statusSince.set(pane.pane_id, now);
-    }
-    if (hasLoaded && prev && prev !== pane.agent_status) {
-      const st = useMustr.getState();
-      const wanted =
-        (pane.agent_status === "blocked" && st.notifyBlocked) ||
-        (pane.agent_status === "done" && st.notifyDone);
-      if (wanted) {
-        notifyStatusChange(pane.agent_status, paneDisplayName(pane), pane.agent, pane.pane_id);
-      }
+  const prev = lastStatus.get(pane.pane_id);
+  if (prev === undefined || prev !== pane.agent_status) {
+    statusSince.set(pane.pane_id, now);
+  }
+  if (hasLoaded && prev && prev !== pane.agent_status) {
+    const st = useMustr.getState();
+    const wanted =
+      (pane.agent_status === "blocked" && st.notifyBlocked) ||
+      (pane.agent_status === "done" && st.notifyDone);
+    if (wanted) {
+      notifyStatusChange(pane.agent_status, paneDisplayName(pane), pane.agent, pane.pane_id);
     }
   }
-  lastStatus = new Map(snapshot.panes.map((p) => [p.pane_id, p.agent_status]));
+  lastStatus.set(pane.pane_id, pane.agent_status);
+}
+
+function trackStatuses(snapshot: SessionSnapshot, hasLoaded: boolean) {
+  for (const pane of snapshot.panes) {
+    trackPaneStatus(pane, hasLoaded);
+  }
 }
 
 export const useMustr = create<MustrState>((set, get) => ({
@@ -246,14 +274,8 @@ export const useMustr = create<MustrState>((set, get) => ({
         selectedTabId = focused?.tab_id ?? null;
       }
 
-      // Git summaries: local only, throttled — one batch per 10s.
-      if (get().activeServerId === "local" && Date.now() - lastGitFetch > 10_000) {
-        lastGitFetch = Date.now();
-        const cwds = [...new Set(snapshot.panes.map((p) => p.cwd).filter(Boolean))];
-        void gitSummaries(cwds)
-          .then((git) => set({ git }))
-          .catch(() => {});
-      }
+      // Git summaries: local only, refetched when the cwd set changes.
+      maybeFetchGit(snapshot.panes, get().activeServerId);
 
       // The parallel fetch covers the common case; re-fetch only when the
       // snapshot moved selection to a different tab.
@@ -279,11 +301,56 @@ export const useMustr = create<MustrState>((set, get) => ({
   },
 
   scheduleRefresh: () => {
-    if (refreshTimer) return;
-    refreshTimer = setTimeout(() => {
+    // Hidden windows defer structural refreshes; one fires on visible.
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+      refreshPending = true;
+      return;
+    }
+    if (refreshTimer != null) return;
+    refreshTimer = window.setTimeout(() => {
       refreshTimer = null;
       void get().refresh();
     }, 150);
+  },
+
+  applyPaneUpdate: (pane) => {
+    const st = get();
+    const idx = st.panes.findIndex((p) => p.pane_id === pane.pane_id);
+    const prev = idx >= 0 ? st.panes[idx] : undefined;
+    // Spinner-title churn bumps the row constantly; merge only when a
+    // field the UI actually shows moved.
+    if (
+      prev &&
+      prev.tab_id === pane.tab_id &&
+      prev.workspace_id === pane.workspace_id &&
+      prev.focused === pane.focused &&
+      prev.agent_status === pane.agent_status &&
+      prev.cwd === pane.cwd &&
+      prev.agent === pane.agent &&
+      prev.terminal_title_stripped === pane.terminal_title_stripped
+    ) {
+      return;
+    }
+    trackPaneStatus(pane, st.hasLoaded);
+    const panes =
+      idx >= 0
+        ? st.panes.map((p, i) => (i === idx ? { ...prev, ...pane } : p))
+        : [...st.panes, pane];
+    set({ panes });
+    maybeFetchGit(panes, st.activeServerId);
+    // Workspace rollups and trees come only from snapshots; refresh for
+    // real when an agent changes state (rare vs title churn).
+    if (!prev || prev.agent_status !== pane.agent_status) get().scheduleRefresh();
+  },
+
+  mergeGit: (summaries) =>
+    set((st) => ({ git: { ...st.git, ...summaries } })),
+
+  onVisible: () => {
+    if (refreshPending) {
+      refreshPending = false;
+      void get().refresh();
+    }
   },
 
   setConnected: (connected) => {

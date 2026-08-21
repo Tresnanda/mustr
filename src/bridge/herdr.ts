@@ -26,6 +26,18 @@ export interface PaneInfo {
   terminal_title_stripped: string;
 }
 
+/** Runtime check for pushed pane rows (the `pane.updated` event body).
+    Only fields the mirror needs are verified; the wire row carries more. */
+export function isPaneRow(v: unknown): v is PaneInfo {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    typeof (v as PaneInfo).pane_id === "string" &&
+    typeof (v as PaneInfo).agent_status === "string" &&
+    typeof (v as PaneInfo).terminal_title_stripped === "string"
+  );
+}
+
 export interface WorkspaceInfo {
   workspace_id: string;
   label: string;

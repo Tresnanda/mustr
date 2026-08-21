@@ -3,6 +3,18 @@
 All notable changes to Mustr. Versions are semver; each release states its
 herdr protocol compatibility.
 
+## Unreleased
+
+- Idle resource usage fixed (issue #1): the frontend no longer polls.
+  `pane.updated` events carry the full pane row and are merged directly;
+  structural events re-seed from a snapshot; a 120s reconciliation pass
+  replaces the old 15s poll. `api_request`/`git_summaries` moved off the
+  main thread (`spawn_blocking`), and git summaries became a
+  backend-owned cache pushed over FSEvents (`herdr-git`) instead of git
+  subprocess spawns per refresh. Refreshes pause while the window is
+  hidden; notifications keep working. Measured idle CPU drops from ~5%
+  to ~0 (see docs/perf-protocol.md).
+
 ## 0.1.4 — 2026-08-21
 
 Compatible with **herdr 0.8.0 / protocol 19 and 0.8.2 / protocol 20**.
