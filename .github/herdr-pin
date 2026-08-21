@@ -1,7 +1,11 @@
-# Herdr protocol pin. CI fails if the pinned tag's wire.rs upstream stops
-# matching this hash, or if the vendored copy's PROTOCOL_VERSION drifts —
-# forcing a conscious re-vendor instead of a silent wire mismatch.
-tag=v0.8.0
-path=src/protocol/wire.rs
-sha256=e44fe71f419905f0929ac8bbcc978feb2814141f0e07d2754980656633f9584a
-protocol=19
+# Herdr protocol pins — one block per supported wire generation.
+# CI fails if a pinned tag's wire.rs upstream stops matching this hash, or if
+# the vendored copy's PROTOCOL_VERSION drifts from the pin — forcing a
+# conscious re-vendor instead of a silent wire mismatch.
+# Vendored copies: src-tauri/src/protocol/wire<protocol>.rs
+tag19=v0.8.0
+sha256_19=e44fe71f419905f0929ac8bbcc978feb2814141f0e07d2754980656633f9584a
+protocol19=19
+tag20=v0.8.2
+sha256_20=4246cb081c1953b198081a80242deb2e1f126a3bde140d00cafba8aa51ae7722
+protocol20=20

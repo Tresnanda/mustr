@@ -44,23 +44,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify herdr protocol pin
+      - name: Verify herdr protocol pins
         run: |
           set -euo pipefail
-          source <(grep -E '^(tag|path|sha256|protocol)=' .github/herdr-pin)
-          curl -fsSL -o /tmp/upstream-wire.rs \
-            "https://raw.githubusercontent.com/herdrdev/herdr/${tag}/${path}"
-          actual=$(sha256sum /tmp/upstream-wire.rs | cut -d' ' -f1)
-          if [ "$actual" != "$sha256" ]; then
-            echo "::error::Upstream ${tag} ${path} no longer matches the recorded pin."
-            echo "recorded: $sha256"
-            echo "actual:   $actual"
-            exit 1
-          fi
-          vendored=$(sed -nE 's/.*PROTOCOL_VERSION: u32 = ([0-9]+).*/\1/p' \
-            src-tauri/src/protocol/wire.rs | head -1)
-          if [ "$vendored" != "$protocol" ]; then
-            echo "::error::Vendored PROTOCOL_VERSION ($vendored) differs from the pin ($protocol). Re-vendor consciously and update .github/herdr-pin."
-            exit 1
-          fi
-          echo "Pin holds: herdr ${tag}, protocol ${protocol}."
+          for gen in 19 20; do
+            tag=$(grep -E "^tag$gen=" .github/herdr-pin | cut -d= -f2)
+            sha=$(grep -E "^sha256_$gen=" .github/herdr-pin | cut -d= -f2)
+            protocol=$(grep -E "^protocol$gen=" .github/herdr-pin | cut -d= -f2)
+            vendored="src-tauri/src/protocol/wire${protocol}.rs"
+            curl -fsSL -o /tmp/upstream-wire.rs \
+              "https://raw.githubusercontent.com/herdrdev/herdr/${tag}/src/protocol/wire.rs"
+            actual=$(sha256sum /tmp/upstream-wire.rs | cut -d' ' -f1)
+            if [ "$actual" != "$sha" ]; then
+              echo "::error::Upstream ${tag} wire.rs no longer matches the recorded pin."
+              echo "recorded: $sha"
+              echo "actual:   $actual"
+              exit 1
+            fi
+            vendored_version=$(sed -nE 's/.*PROTOCOL_VERSION: u32 = ([0-9]+).*/\1/p' "$vendored" | head -1)
+            if [ "$vendored_version" != "$protocol" ]; then
+              echo "::error::Vendored $vendored PROTOCOL_VERSION ($vendored_version) differs from the pin ($protocol). Re-vendor consciously and update .github/herdr-pin."
+              exit 1
+            fi
+            echo "Pin holds: herdr ${tag}, protocol ${protocol} → $vendored."
+          done

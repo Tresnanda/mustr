@@ -1,4 +1,4 @@
-# Herdr protocol — empirical notes (verified against herdr 0.8.0, protocol 19)
+# Herdr protocol — empirical notes (verified against herdr 0.8.0 / protocol 19 and 0.8.2 / protocol 20)
 
 Findings from live testing that the docs/schema don't make obvious. Keep this
 updated whenever behavior is verified against a real server.
@@ -20,7 +20,7 @@ updated whenever behavior is verified against a real server.
 - `api snapshot` (CLI) / `session.snapshot` returns everything in one shot:
   agents, panes, tabs, workspaces, layouts (BSP with splits+ratios+rects) — ideal M1 seed.
 
-## Render socket (`herdr-client.sock`, protocol 19)
+## Render socket (`herdr-client.sock`, protocols 19 & 20)
 
 - Framing: u32 LE length prefix + bincode 2 `config::standard()` (varint ints,
   enum variant index as varint).
@@ -33,14 +33,24 @@ updated whenever behavior is verified against a real server.
 - `ClientMessage::Input{data}` with raw bytes (e.g. `"echo hi\r"`) round-trips —
   verified by reading the result back through `pane.read`.
 - 0.8.0 vs 0.8.2 wire is **incompatible** (v20 inserted `ClientLaunchMode::AppDirectGraphics`,
-  shifting bincode variant indices; 0.8.2 also added `TerminalBell` etc.).
-  Vendored `wire.rs` must match the server generation — currently pinned to v0.8.0 tag.
+  shifting bincode variant indices; v20 also added a `sgr_pixels` field to
+  `MouseCapture` and appended `TerminalBell`/`GraphicsFile`/`GraphicsTransmissionRetired`
+  plus client-side `GraphicsTransmissionResult`/`InputPixels`/`GraphicsTransmissionStarted`).
+  All additions sit **after** the variants Mustr sends, so only `Hello` (version
+  field + shifted `TerminalAttach` discriminant) differs for us in practice.
+  Both generations are vendored: `src-tauri/src/protocol/wire19.rs` (v0.8.0) and
+  `wire20.rs` (v0.8.2), behind the negotiation façade in `protocol/mod.rs`.
 
 ## Version-skew plan
 
-`Welcome.error` carries a clean rejection message on mismatch, and JSON `ping.protocol`
-tells us the server's protocol before attaching. When herdr updates past 0.8.0,
-re-vendor `wire.rs` from the matching tag and bump the pin note in the file header.
+The JSON `ping.protocol` announces the server's generation before attach
+(see `negotiate()` in `herdr/term.rs`); `Codec` then speaks exactly that
+generation via the matching vendored module. Unsupported protocol numbers fail
+with an explicit "supported range" error. When herdr ships a new generation:
+re-vendor as `wireNN.rs` (same modification recipe as the existing files),
+add a `Gen` variant + mapping arms, extend `.github/herdr-pin`, and cut a release.
+Live harness: `src-tauri/src/herdr/gen_test.rs` (`cargo test -- --ignored`,
+honors `MUSTR_LIVE_BIN` / `MUSTR_LIVE_HOME`).
 
 ## How `herdr --remote` transports (from source, v0.8.0 `src/remote/unix.rs`)
 

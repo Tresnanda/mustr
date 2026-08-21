@@ -3,6 +3,18 @@
 All notable changes to Mustr. Versions are semver; each release states its
 herdr protocol compatibility.
 
+## 0.1.4 — 2026-08-21
+
+Compatible with **herdr 0.8.0 / protocol 19 and 0.8.2 / protocol 20**.
+
+- Mustr now speaks both herdr wire generations. The server's protocol is
+  detected at connect (JSON `ping`) and each pane attaches using the matching
+  vendored wire definitions, so upgrading herdr no longer breaks the app at
+  the handshake — servers announcing an unsupported protocol get a clear
+  error stating the supported range.
+- CI now pins and hash-verifies both upstream wire sources
+  (`wire19.rs` ← v0.8.0, `wire20.rs` ← v0.8.2).
+
 ## 0.1.3 — 2026-08-21
 
 Compatible with **herdr 0.8.0 / protocol 19**.

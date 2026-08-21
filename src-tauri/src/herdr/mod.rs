@@ -10,3 +10,5 @@ pub mod servers;
 pub mod term;
 #[cfg(test)]
 mod probe_test;
+#[cfg(test)]
+mod gen_test;

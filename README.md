@@ -32,10 +32,15 @@ That's it — the script fetches the right build for your Mac, puts it in
 <details>
 <summary>Installing from the DMG instead</summary>
 
-You can also grab the `.dmg` from [Releases](https://github.com/Tresnanda/mustr/releases),
-but the app is **unsigned**, and macOS quarantines browser downloads — Gatekeeper
-will claim the app "is damaged" (it isn't). After dragging Mustr to Applications,
-clear the flag:
+You can also grab the `.dmg` from [Releases](https://github.com/Tresnanda/mustr/releases).
+Builds are codesigned with a self-signed identity (**not** notarized), so macOS
+still blocks a plain double-click of a browser download. On first launch,
+right-click Mustr and choose **Open** (or approve it under System Settings →
+Privacy & Security); after that it opens normally, and the stable signature
+keeps permissions intact across in-app updates.
+
+Releases older than this signing change shipped unsigned binaries — those hit
+Gatekeeper's fatal "damaged" dialog instead, fixable with:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/Mustr.app
@@ -47,16 +52,22 @@ The install script avoids all of this, which is why it's the recommended path.
 ### Requirements
 
 - macOS 13+
-- [herdr](https://github.com/herdrdev/herdr) installed locally (`brew install herdr`
-  or see upstream docs). Mustr auto-starts a server if none is running.
+- [herdr](https://github.com/herdrdev/herdr) installed locally (`brew install
+  herdr` or see upstream docs). Mustr auto-starts a server if none is running.
+  Any herdr speaking a supported wire protocol works (see Compatibility).
 - For remote hosts: `ssh` access to a machine with a running herdr server.
 
 ### Compatibility
 
-Mustr pins herdr's wire protocol per release. This build speaks **protocol 19**
-(herdr **0.8.0**). Newer herdr versions with a different protocol number are
-rejected at connect rather than misread — check the release notes for the
-supported range before upgrading herdr.
+Mustr speaks a **range** of herdr wire protocol generations, vendored per
+release: this build supports herdr **0.8.0 (protocol 19) and 0.8.2 (protocol
+20)** — including any future herdr that still speaks one of those protocols.
+The server's generation is detected at connect; unsupported protocol numbers
+are rejected with a clear error rather than misread.
+
+When upstream herdr ships a new protocol generation, Mustr must re-vendor the
+wire definitions and cut a release before it can talk to it — check the
+release notes for the supported range before upgrading either side.
 
 ## Development
 

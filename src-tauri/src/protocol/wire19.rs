@@ -7,7 +7,7 @@
 //! `src/protocol/wire.rs` — Apache License 2.0, Copyright herdr contributors.
 //! Modifications: removed ratatui/crossterm-dependent helpers and the test
 //! module; stubbed the Windows-only key record (never constructed here).
-//! Pinned to PROTOCOL_VERSION 19 (matches installed herdr 0.8.0).
+//! Generation 19 (wire protocol of herdr v0.8.0).
 
 #![allow(dead_code)]
 

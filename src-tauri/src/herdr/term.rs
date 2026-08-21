@@ -11,11 +11,9 @@ use std::sync::Mutex;
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
 use serde::Serialize;
+use serde_json::json;
 
-use crate::protocol::wire::{
-    self, AttachScrollDirection, AttachScrollSource, ClientKeybindings, ClientLaunchMode,
-    ClientMessage, RenderEncoding, ServerMessage,
-};
+use crate::protocol::{ClientMsg, Codec, ServerFrame};
 
 
 #[cfg(unix)]
@@ -40,8 +38,10 @@ pub enum TermEvent {
 
 pub struct Attachment {
     writer: Mutex<Stream>,
+    codec: Codec,
     alive: AtomicBool,
 }
+
 
 impl Attachment {
     pub fn open(
@@ -55,27 +55,21 @@ impl Attachment {
         let mut stream = Stream::connect(&path)
             .map_err(|e| format!("herdr render socket not reachable at {}: {e}", path.display()))?;
 
-        wire::write_message(
-            &mut stream,
-            &ClientMessage::Hello {
-                version: wire::PROTOCOL_VERSION,
-                cols,
-                rows,
-                cell_width_px: 0,
-                cell_height_px: 0,
-                requested_encoding: RenderEncoding::TerminalAnsi,
-                keybindings: ClientKeybindings::Server,
-                launch_mode: ClientLaunchMode::TerminalAttach,
-            },
-        )
-        .map_err(|e| format!("handshake write failed: {e}"))?;
+        // Negotiate the wire generation before Hello: the server rejects
+        // mismatched clients outright, so we must speak *its* protocol. The
+        // JSON API's ping announces it (see docs/protocol-notes.md).
+        let codec = negotiate(server)?;
 
-        let welcome: ServerMessage =
-            wire::read_message(&mut stream, wire::MAX_GRAPHICS_FRAME_SIZE)
-                .map_err(|e| format!("handshake read failed: {e}"))?;
-        match welcome {
-            ServerMessage::Welcome { error: None, .. } => {}
-            ServerMessage::Welcome { error: Some(err), version, .. } => {
+        codec
+            .write(&mut stream, &ClientMsg::Hello { cols, rows })
+            .map_err(|e| format!("handshake write failed: {e}"))?;
+
+        match codec.read(&mut stream).map_err(|e| format!("handshake read failed: {e}"))? {
+            ServerFrame::Welcome { error: None, .. } => {}
+            ServerFrame::Welcome {
+                error: Some(err),
+                version,
+            } => {
                 return Err(format!(
                     "server rejected client (server protocol {version}): {err}"
                 ));
@@ -83,20 +77,22 @@ impl Attachment {
             other => return Err(format!("unexpected handshake reply: {other:?}")),
         }
 
-        wire::write_message(
-            &mut stream,
-            &ClientMessage::ControlTerminal {
-                target: target.to_owned(),
-                takeover: true,
-            },
-        )
-        .map_err(|e| format!("attach write failed: {e}"))?;
+        codec
+            .write(
+                &mut stream,
+                &ClientMsg::ControlTerminal {
+                    target: target.to_owned(),
+                    takeover: true,
+                },
+            )
+            .map_err(|e| format!("attach write failed: {e}"))?;
 
         let mut read_half = stream
             .try_clone()
             .map_err(|e| format!("socket clone failed: {e}"))?;
         let attachment = std::sync::Arc::new(Self {
             writer: Mutex::new(stream),
+            codec,
             alive: AtomicBool::new(true),
         });
 
@@ -108,28 +104,26 @@ impl Attachment {
                 if !for_reader.alive.load(Ordering::Relaxed) {
                     break;
                 }
-                match wire::read_message::<_, ServerMessage>(
-                    &mut read_half,
-                    wire::MAX_GRAPHICS_FRAME_SIZE,
-                ) {
-                    Ok(ServerMessage::Terminal(frame)) => on_event(TermEvent::Data {
+                match for_reader.codec.read(&mut read_half) {
+                    Ok(ServerFrame::Terminal(frame)) => on_event(TermEvent::Data {
                         b64: B64.encode(&frame.bytes),
                         full: frame.full,
                         cols: frame.width,
                         rows: frame.height,
                     }),
-                    Ok(ServerMessage::WindowTitle { title: Some(title) }) => {
+                    Ok(ServerFrame::WindowTitle(Some(title))) => {
                         on_event(TermEvent::Title { title })
                     }
-                    Ok(ServerMessage::MouseCapture { enabled }) => {
+                    Ok(ServerFrame::MouseCapture(enabled)) => {
                         on_event(TermEvent::MouseCapture { enabled })
                     }
-                    Ok(ServerMessage::ServerShutdown { reason }) => {
+                    Ok(ServerFrame::ServerShutdown(reason)) => {
                         on_event(TermEvent::Closed { reason });
                         break;
                     }
-                    // Semantic frames, graphics, clipboard, sounds: not used in
-                    // TerminalAnsi attach mode (graphics/clipboard land in M1+).
+                    // Welcome, semantic frames, graphics, clipboard, bells,
+                    // titles cleared to None: not acted on in TerminalAnsi
+                    // attach mode.
                     Ok(_) => {}
                     Err(err) => {
                         let reason = if for_reader.alive.load(Ordering::Relaxed) {
@@ -147,44 +141,61 @@ impl Attachment {
         Ok(attachment)
     }
 
-    fn send(&self, msg: &ClientMessage) -> Result<(), String> {
+    fn send(&self, msg: &ClientMsg) -> Result<(), String> {
         let mut writer = self.writer.lock().map_err(|_| "writer poisoned")?;
-        wire::write_message(&mut *writer, msg).map_err(|e| format!("send failed: {e}"))
+        self.codec
+            .write(&mut *writer, msg)
+            .map_err(|e| format!("send failed: {e}"))
     }
 
     pub fn input(&self, data: Vec<u8>) -> Result<(), String> {
-        self.send(&ClientMessage::Input { data })
+        self.send(&ClientMsg::Input { data })
     }
 
     pub fn resize(&self, cols: u16, rows: u16) -> Result<(), String> {
-        self.send(&ClientMessage::Resize {
-            cols,
-            rows,
-            cell_width_px: 0,
-            cell_height_px: 0,
-        })
+        self.send(&ClientMsg::Resize { cols, rows })
     }
 
-    pub fn scroll(&self, up: bool, lines: u16, column: Option<u16>, row: Option<u16>) -> Result<(), String> {
-        self.send(&ClientMessage::AttachScroll {
-            source: AttachScrollSource::Wheel,
-            direction: if up {
-                AttachScrollDirection::Up
-            } else {
-                AttachScrollDirection::Down
-            },
+    pub fn scroll(
+        &self,
+        up: bool,
+        lines: u16,
+        column: Option<u16>,
+        row: Option<u16>,
+    ) -> Result<(), String> {
+        self.send(&ClientMsg::Scroll {
+            up,
             lines,
             column,
             row,
-            modifiers: 0,
         })
     }
 
     pub fn detach(&self) {
         self.alive.store(false, Ordering::Relaxed);
-        let _ = self.send(&ClientMessage::Detach);
+        let _ = self.send(&ClientMsg::Detach);
         if let Ok(writer) = self.writer.lock() {
             let _ = writer.shutdown(std::net::Shutdown::Both);
         }
     }
+}
+
+/// Asks the server which wire generation it speaks (JSON API `ping`) and
+/// returns a matching [`Codec`].
+///
+/// herdr rejects mismatched clients at handshake, and the binary protocol's
+/// variant indices shift between generations — there is no "speak older"
+/// fallback. An unsupported server needs a Mustr release vendored for it.
+fn negotiate(server: &str) -> Result<Codec, String> {
+    let result = super::api::request(server, "ping", json!({}))?;
+    let protocol = result["protocol"].as_u64().unwrap_or(0) as u32;
+    let gen = crate::protocol::Gen::from_server_protocol(protocol).ok_or_else(|| {
+        format!(
+            "herdr server speaks wire protocol {protocol}, but this build supports {}–{} \
+             (see the release notes for the compatible herdr version)",
+            crate::protocol::MIN_SUPPORTED_PROTOCOL,
+            crate::protocol::MAX_SUPPORTED_PROTOCOL
+        )
+    })?;
+    Ok(Codec::new(gen))
 }
