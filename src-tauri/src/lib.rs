@@ -30,6 +30,16 @@ fn git_summaries(cwds: Vec<String>) -> std::collections::HashMap<String, herdr::
     herdr::gitinfo::summaries(cwds)
 }
 
+/// Lists directories on a saved SSH server for the new-space browser.
+/// Blocking is fine: non-async commands run off the main thread.
+#[tauri::command]
+fn remote_list_dirs(
+    server: String,
+    path: Option<String>,
+) -> Result<herdr::remotefs::RemoteDirListing, String> {
+    herdr::remotefs::list_dirs(&server, path)
+}
+
 #[tauri::command]
 fn servers_list() -> Vec<ServerRow> {
     herdr::servers::list()
@@ -218,6 +228,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             api_request,
             git_summaries,
+            remote_list_dirs,
             servers_list,
             server_add,
             ssh_aliases,

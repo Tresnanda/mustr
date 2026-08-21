@@ -21,6 +21,7 @@ import { SessionSwitcher } from "./SessionSwitcher";
 import { dragHandlers } from "../DragRegion";
 import { SpaceMenu } from "./SpaceMenu";
 import { AgentFilterMenu, agentViewDirty } from "./AgentFilterMenu";
+import { RemoteFolderDialog } from "./RemoteFolderDialog";
 import { Tip } from "../ui/Tip";
 import { springSettle } from "../../design/motion";
 
@@ -414,7 +415,18 @@ export function Sidebar() {
   const newSpace = useMustr((s) => s.newSpace);
   const reduce = useReducedMotion();
 
+  // The native open panel only sees this Mac's filesystem; on an SSH host
+  // the folder is picked with the remote browser instead.
+  const servers = useMustr((s) => s.servers);
+  const activeServerId = useMustr((s) => s.activeServerId);
+  const activeServer = servers.find((s) => s.id === activeServerId) ?? null;
+  const [remoteBrowseOpen, setRemoteBrowseOpen] = useState(false);
+
   const pickFolderForSpace = async () => {
+    if (activeServer?.kind === "ssh") {
+      setRemoteBrowseOpen(true);
+      return;
+    }
     const dir = await openDialog({ directory: true, multiple: false, title: "New space folder" });
     if (typeof dir === "string" && dir) await newSpace(dir);
   };
@@ -682,6 +694,13 @@ export function Sidebar() {
 
       <SessionSwitcher />
       <DevicePill />
+
+      <RemoteFolderDialog
+        open={remoteBrowseOpen}
+        server={activeServer}
+        onOpenChange={setRemoteBrowseOpen}
+        onChoose={(path) => void newSpace(path)}
+      />
     </div>
   );
 }

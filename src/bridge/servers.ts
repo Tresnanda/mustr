@@ -21,6 +21,20 @@ export const disconnectServer = (id: string) => invoke<ServerRow[]>("server_disc
 export const openHostWindow = (id: string) => invoke<void>("open_host_window", { id });
 export const sshAliases = () => invoke<string[]>("ssh_aliases");
 
+export interface RemoteDirEntry {
+  name: string;
+  /** Directory contains a .git — likely a repo worth becoming a space. */
+  git: boolean;
+}
+export interface RemoteDirListing {
+  path: string;
+  home: string;
+  entries: RemoteDirEntry[];
+}
+/** Lists directories on a saved SSH server; empty path lists its home. */
+export const listRemoteDirs = (server: string, path?: string) =>
+  invoke<RemoteDirListing>("remote_list_dirs", { server, path: path ?? null });
+
 export interface GitSummary {
   branch: string;
   dirty: boolean;

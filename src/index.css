@@ -273,3 +273,63 @@ html.theme-switching * {
 .term-mouse-owned .xterm .xterm-screen {
   cursor: default !important;
 }
+
+/* Remote folder browser (new space on an SSH host). Navigation is a light
+   directional cross-blur — deeper slides in from the right, enclosing from
+   the left — small enough to stay quiet at browsing frequency. */
+@keyframes rfb-in-deeper {
+  from { opacity: 0; translate: 8px 0; filter: blur(2px); }
+  to { opacity: 1; translate: 0 0; filter: blur(0); }
+}
+@keyframes rfb-in-up {
+  from { opacity: 0; translate: -8px 0; filter: blur(2px); }
+  to { opacity: 1; translate: 0 0; filter: blur(0); }
+}
+.rfb-in-deeper { animation: rfb-in-deeper 160ms var(--ease-out) both; }
+.rfb-in-up { animation: rfb-in-up 160ms var(--ease-out) both; }
+
+/* Path-field rejection: per-segment shake, decaying amplitude. */
+@keyframes rfb-shake {
+  0% { translate: 0 0; }
+  15% { translate: -6px 0; }
+  35% { translate: 5px 0; }
+  55% { translate: -4px 0; }
+  75% { translate: 2px 0; }
+  100% { translate: 0 0; }
+}
+.rfb-shake { animation: rfb-shake 360ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+
+/* First-connect status line: shimmer sweep while the SSH handshake runs. */
+@keyframes rfb-shimmer {
+  from { background-position: 130% 0; }
+  to { background-position: -30% 0; }
+}
+.rfb-shimmer {
+  background: linear-gradient(
+      100deg,
+      var(--text-muted) 42%,
+      var(--text-primary) 50%,
+      var(--text-muted) 58%
+    )
+    no-repeat;
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: rfb-shimmer 1.6s var(--ease-in-out) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rfb-in-deeper,
+  .rfb-in-up {
+    animation-name: overlay-in;
+  }
+  .rfb-shake {
+    animation: none;
+  }
+  .rfb-shimmer {
+    animation: none;
+    background: none;
+    color: var(--text-muted);
+  }
+}
