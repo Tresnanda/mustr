@@ -187,6 +187,12 @@ export default function App() {
     const clock = setInterval(() => {
       if (!document.hidden) tick();
     }, 30000);
+    // Cheap status drift check: only reconciles when a pane has looked
+    // working/blocked too long (a dropped resting-state push), otherwise a
+    // no-op — so an idle app stays idle.
+    const freshness = setInterval(() => {
+      if (!document.hidden) useMustr.getState().reconcileIfStale();
+    }, 10000);
     const onVisibility = () => {
       if (!document.hidden) useMustr.getState().onVisible();
     };
@@ -294,6 +300,7 @@ export default function App() {
     return () => {
       clearInterval(reconcile);
       clearInterval(clock);
+      clearInterval(freshness);
       window.removeEventListener("focus", onActivate);
       window.removeEventListener("keydown", onShortcut, true);
       document.removeEventListener("visibilitychange", onVisibility);

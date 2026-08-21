@@ -130,6 +130,7 @@ interface MustrState {
   loadServers: () => Promise<void>;
   switchServer: (id: string) => Promise<void>;
   tick: () => void;
+  reconcileIfStale: () => void;
 }
 
 const WARM_TABS = 4;
@@ -142,6 +143,12 @@ function touchVisited(visited: string[], tabId: string | null): string[] {
 let refreshTimer: number | null = null;
 let lastStatus = new Map<string, AgentStatus>();
 let lastGitCwds: string[] | null = null;
+
+// Status drift self-heal (see reconcileIfStale): a pane still "working" this
+// long after its last change is treated as a dropped resting-state push.
+const STALE_STATUS_MS = 15_000;
+const STALE_RECONCILE_MIN_GAP_MS = 20_000;
+let lastStaleReconcile = 0;
 
 /** Local only: fetch the backend git cache when the set of pane cwds
     changes. The backend keeps entries fresh via FSEvents pushes
@@ -187,10 +194,75 @@ function trackPaneStatus(pane: PaneInfo, hasLoaded: boolean) {
   lastStatus.set(pane.pane_id, pane.agent_status);
 }
 
-function trackStatuses(snapshot: SessionSnapshot, hasLoaded: boolean) {
-  for (const pane of snapshot.panes) {
-    trackPaneStatus(pane, hasLoaded);
+// Coalesce sub-second agent_status flaps. herdr can toggle a pane
+// working↔idle between quick tool calls; with the status-ordered agent list
+// that re-sorts the rows (visible thrash) and flashes the working spinner for
+// blips that aren't real activity. A new status only becomes visible once it
+// has held for STATUS_SETTLE_MS; a status that reverts before then is dropped.
+// First sighting of a pane commits immediately. Icon, sort, statusSince and
+// notifications all follow the settled value, so they stay consistent.
+const STATUS_SETTLE_MS = 500;
+const shownStatus = new Map<string, AgentStatus>();
+const pendingStatus = new Map<string, { target: AgentStatus; timer: number }>();
+
+function clearStatusSmoothing() {
+  for (const { timer } of pendingStatus.values()) clearTimeout(timer);
+  pendingStatus.clear();
+  shownStatus.clear();
+}
+
+/** The status to display for a pane now; schedules a deferred commit when a
+    real change settles. */
+function settleStatus(paneId: string, raw: AgentStatus): AgentStatus {
+  const shown = shownStatus.get(paneId);
+  if (shown === undefined) {
+    shownStatus.set(paneId, raw);
+    return raw;
   }
+  const pending = pendingStatus.get(paneId);
+  if (raw === shown) {
+    // Settled back before the window closed — the flap never happened.
+    if (pending) {
+      clearTimeout(pending.timer);
+      pendingStatus.delete(paneId);
+    }
+    return shown;
+  }
+  if (pending?.target === raw) return shown; // already waiting on this target
+  if (pending) clearTimeout(pending.timer);
+  const timer = window.setTimeout(() => {
+    pendingStatus.delete(paneId);
+    shownStatus.set(paneId, raw);
+    commitSettledStatus(paneId, raw);
+  }, STATUS_SETTLE_MS);
+  pendingStatus.set(paneId, { target: raw, timer });
+  return shown;
+}
+
+/** Returns pane with its displayed (settled) status, running the same
+    per-pane tracking the immediate paths use. */
+function withSettledStatus(pane: PaneInfo, hasLoaded: boolean): PaneInfo {
+  const settled = settleStatus(pane.pane_id, pane.agent_status);
+  const spane = settled === pane.agent_status ? pane : { ...pane, agent_status: settled };
+  trackPaneStatus(spane, hasLoaded);
+  return spane;
+}
+
+/** Push a settled status into state so the icon and sort update once the flap
+    window has closed. */
+function commitSettledStatus(paneId: string, status: AgentStatus) {
+  const st = useMustr.getState();
+  const idx = st.panes.findIndex((p) => p.pane_id === paneId);
+  if (idx < 0) return;
+  const pane = { ...st.panes[idx], agent_status: status };
+  trackPaneStatus(pane, st.hasLoaded);
+  useMustr.setState({ panes: st.panes.map((p, i) => (i === idx ? pane : p)) });
+  st.scheduleRefresh();
+}
+
+/** Settle every pane in a snapshot; returns the panes to store. */
+function trackStatuses(snapshot: SessionSnapshot, hasLoaded: boolean): PaneInfo[] {
+  return snapshot.panes.map((pane) => withSettledStatus(pane, hasLoaded));
 }
 
 export const useMustr = create<MustrState>((set, get) => ({
@@ -259,7 +331,7 @@ export const useMustr = create<MustrState>((set, get) => ({
         sessionSnapshot(),
         fetchTree(selectedBefore),
       ]);
-      trackStatuses(snapshot, get().hasLoaded);
+      const settledPanes = trackStatuses(snapshot, get().hasLoaded);
 
       let { selectedTabId, selectedPaneId } = get();
       const paneExists = snapshot.panes.some((p) => p.pane_id === selectedPaneId);
@@ -285,7 +357,7 @@ export const useMustr = create<MustrState>((set, get) => ({
         server,
         workspaces: snapshot.workspaces,
         tabs: snapshot.tabs,
-        panes: snapshot.panes,
+        panes: settledPanes,
         layouts: snapshot.layouts,
         trees:
           tree && selectedTabId ? { ...st.trees, [selectedTabId]: tree } : st.trees,
@@ -315,32 +387,35 @@ export const useMustr = create<MustrState>((set, get) => ({
 
   applyPaneUpdate: (pane) => {
     const st = get();
-    const idx = st.panes.findIndex((p) => p.pane_id === pane.pane_id);
+    // Show the settled status, not the raw flap (see settleStatus).
+    const settled = settleStatus(pane.pane_id, pane.agent_status);
+    const spane = settled === pane.agent_status ? pane : { ...pane, agent_status: settled };
+    const idx = st.panes.findIndex((p) => p.pane_id === spane.pane_id);
     const prev = idx >= 0 ? st.panes[idx] : undefined;
     // Spinner-title churn bumps the row constantly; merge only when a
     // field the UI actually shows moved.
     if (
       prev &&
-      prev.tab_id === pane.tab_id &&
-      prev.workspace_id === pane.workspace_id &&
-      prev.focused === pane.focused &&
-      prev.agent_status === pane.agent_status &&
-      prev.cwd === pane.cwd &&
-      prev.agent === pane.agent &&
-      prev.terminal_title_stripped === pane.terminal_title_stripped
+      prev.tab_id === spane.tab_id &&
+      prev.workspace_id === spane.workspace_id &&
+      prev.focused === spane.focused &&
+      prev.agent_status === spane.agent_status &&
+      prev.cwd === spane.cwd &&
+      prev.agent === spane.agent &&
+      prev.terminal_title_stripped === spane.terminal_title_stripped
     ) {
       return;
     }
-    trackPaneStatus(pane, st.hasLoaded);
+    trackPaneStatus(spane, st.hasLoaded);
     const panes =
       idx >= 0
-        ? st.panes.map((p, i) => (i === idx ? { ...prev, ...pane } : p))
-        : [...st.panes, pane];
+        ? st.panes.map((p, i) => (i === idx ? { ...prev, ...spane } : p))
+        : [...st.panes, spane];
     set({ panes });
     maybeFetchGit(panes, st.activeServerId);
     // Workspace rollups and trees come only from snapshots; refresh for
     // real when an agent changes state (rare vs title churn).
-    if (!prev || prev.agent_status !== pane.agent_status) get().scheduleRefresh();
+    if (!prev || prev.agent_status !== spane.agent_status) get().scheduleRefresh();
   },
 
   mergeGit: (summaries, removed = []) =>
@@ -435,6 +510,27 @@ export const useMustr = create<MustrState>((set, get) => ({
   },
   tick: () => set({ now: Date.now() }),
 
+  // Drift self-heal for status specifically. A working/blocked pane gets
+  // frequent pushes; if one has sat unchanged well past when it should have
+  // moved, herdr likely dropped the resting-state push to this attach client
+  // (they don't get every signal — see protocol-notes). Reconcile once to
+  // catch it, rate-limited so a genuinely long task doesn't spam snapshots.
+  // Idle apps have no working panes, so this never fires when truly idle.
+  reconcileIfStale: () => {
+    const st = get();
+    const now = Date.now();
+    if (now - lastStaleReconcile < STALE_RECONCILE_MIN_GAP_MS) return;
+    const stale = st.panes.some(
+      (p) =>
+        (p.agent_status === "working" || p.agent_status === "blocked") &&
+        now - (statusSince.get(p.pane_id) ?? now) > STALE_STATUS_MS,
+    );
+    if (stale) {
+      lastStaleReconcile = now;
+      void st.refresh();
+    }
+  },
+
   loadServers: async () => {
     try {
       const servers = await listServers();
@@ -455,6 +551,7 @@ export const useMustr = create<MustrState>((set, get) => ({
       // New server, new world: drop the mirror and re-seed.
       lastStatus = new Map();
       statusSince.clear();
+      clearStatusSmoothing();
       set({
         activeServerId: id,
         server: null,
