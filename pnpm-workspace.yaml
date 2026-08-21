@@ -1,2 +1,8 @@
-onlyBuiltDependencies:
+# Build scripts stay off (.npmrc ignore-scripts=true). esbuild's build is
+# reviewed and deliberately NOT run: its platform binary arrives via
+# optionalDependencies, so the postinstall is unnecessary. Recording the
+# decision here keeps pnpm's unreviewed-builds check quiet in CI.
+allowBuilds:
+  esbuild: false
+ignoredBuiltDependencies:
   - esbuild
