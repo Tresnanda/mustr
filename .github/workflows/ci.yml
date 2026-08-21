@@ -57,8 +57,8 @@ jobs:
             echo "actual:   $actual"
             exit 1
           fi
-          vendored=$(grep -E 'pub const PROTOCOL_VERSION: u32 = [0-9]+' \
-            src-tauri/src/protocol/wire.rs | grep -oE '[0-9]+')
+          vendored=$(sed -nE 's/.*PROTOCOL_VERSION: u32 = ([0-9]+).*/\1/p' \
+            src-tauri/src/protocol/wire.rs | head -1)
           if [ "$vendored" != "$protocol" ]; then
             echo "::error::Vendored PROTOCOL_VERSION ($vendored) differs from the pin ($protocol). Re-vendor consciously and update .github/herdr-pin."
             exit 1
