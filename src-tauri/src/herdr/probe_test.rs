@@ -1,5 +1,7 @@
-//! Live-server probe #3: is always-forwarding SGR click bytes safe for a
-//! plain shell prompt? Scratch workspace; closed afterwards.
+//! Live-server probe #4: does an SGR click via Input actually drive a
+//! mouse-tracking TUI? Witness: `vim` with mouse=a — a click at a cell
+//! moves vim's cursor there, visible in the next frame's cursor position.
+//! Scratch workspace; closed afterwards.
 
 use std::sync::mpsc;
 use std::time::Duration;
@@ -8,7 +10,7 @@ use serde_json::json;
 
 use super::{api, term};
 
-fn drain_text(rx: &mpsc::Receiver<term::TermEvent>, ms: u64) -> String {
+fn drain(rx: &mpsc::Receiver<term::TermEvent>, ms: u64) -> Vec<u8> {
     let mut all = Vec::new();
     let deadline = std::time::Instant::now() + Duration::from_millis(ms);
     while let Ok(event) =
@@ -19,7 +21,11 @@ fn drain_text(rx: &mpsc::Receiver<term::TermEvent>, ms: u64) -> String {
             all.extend(base64::engine::general_purpose::STANDARD.decode(b64).unwrap());
         }
     }
-    String::from_utf8_lossy(&all).into_owned()
+    all
+}
+
+fn contains(h: &[u8], n: &[u8]) -> bool {
+    h.windows(n.len()).any(|w| w == n)
 }
 
 #[test]
@@ -35,28 +41,37 @@ fn probe_live() {
         let _ = tx.send(e);
     })
     .expect("attach");
-    drain_text(&rx, 1500);
+    drain(&rx, 1200);
 
-    // Click storm at the idle shell prompt: press, drag, release, wheel.
+    // vim with mouse on, some buffer lines to click around in.
     attachment
-        .input(b"\x1b[<0;5;2M\x1b[<32;6;2M\x1b[<0;6;2m\x1b[<64;5;2M\x1b[<65;5;2M".to_vec())
-        .expect("sgr");
-    let after_clicks = drain_text(&rx, 1200);
+        .input(b"vim -u NONE -N -c 'set mouse=a' -c 'call setline(1, repeat([\"xxxxxxxxxxxxxxxxxxxxxxx\"], 15))'\n".to_vec())
+        .expect("vim");
+    drain(&rx, 2500);
+
+    // Click at column 12, row 7 (1-based SGR press+release).
+    attachment
+        .input(b"\x1b[<0;12;7M\x1b[<0;12;7m".to_vec())
+        .expect("click");
+    drain(&rx, 800);
+    // Ask vim where its cursor is; render it on the status line.
+    attachment
+        .input(b":echo 'CURSOR_' . line('.') . '_' . col('.')\r".to_vec())
+        .expect("echo");
+    let out = drain(&rx, 1500);
+    let text = String::from_utf8_lossy(&out);
     println!(
-        "PROMPT_REACTED_TO_CLICKS={} (len={})",
-        !after_clicks.is_empty(),
-        after_clicks.len()
+        "CLICK_MOVED_VIM_CURSOR={} (expect CURSOR_7_12)",
+        text.contains("CURSOR_7_12")
     );
-    let stray: String = after_clicks.chars().filter(|c| !c.is_control()).take(120).collect();
-    println!("STRAY_RENDER: {stray:?}");
+    if let Some(i) = text.find("CURSOR_") {
+        println!("cursor report: {}", &text[i..i.min(text.len().saturating_sub(1)).min(i) + 20.min(text.len() - i)]);
+    }
+    let ec = contains(&out, b"CURSOR_");
+    println!("cursor_report_seen={ec}");
 
-    // Shell still healthy? echo should round-trip cleanly.
-    attachment.input(b"echo HEALTH_OK_$((6*7))\n".to_vec()).expect("echo");
-    let echoed = drain_text(&rx, 1500);
-    println!("SHELL_HEALTHY={}", echoed.contains("HEALTH_OK_42"));
-    let vis: String = echoed.chars().filter(|c| !c.is_control()).take(200).collect();
-    println!("ECHO_RENDER: {vis:?}");
-
+    attachment.input(b"\x1b:q!\r".to_vec()).expect("quit");
+    drain(&rx, 800);
     attachment.detach();
     let closed = api::request("local", "workspace.close", json!({"workspace_id": ws_id}));
     println!("== closed: {closed:?}");

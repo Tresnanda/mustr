@@ -3,6 +3,18 @@
 All notable changes to Mustr. Versions are semver; each release states its
 herdr protocol compatibility.
 
+## 0.1.3 — 2026-08-21
+
+Compatible with **herdr 0.8.0 / protocol 19**.
+
+- Clicks now work in agent panes: presses, drags, and releases forward to
+  the pane as mouse reports (probe-verified end to end — a click lands on
+  the exact cell). Scoped to panes running a detected agent, because
+  herdr 0.8.x gives attach clients no way to know whether an arbitrary
+  app is listening — a shell would render the bytes as garbage. Shift-click
+  still selects text; a server-side mouse-state signal remains the
+  upstream fix for every other TUI.
+
 ## 0.1.2 — 2026-08-21
 
 Compatible with **herdr 0.8.0 / protocol 19**.

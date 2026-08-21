@@ -72,6 +72,9 @@ export function TerminalView({ paneId, onClosed }: Props) {
   const isAgentPane = useMustr((s) =>
     Boolean(s.panes.find((p) => p.pane_id === paneId)?.agent),
   );
+  /** Live mirror for the attach closure, which must not re-run on change. */
+  const agentPaneRef = useRef(false);
+  agentPaneRef.current = isAgentPane;
 
   // Live font size: applies to the running terminal, then refits.
   useEffect(() => {
@@ -152,12 +155,14 @@ export function TerminalView({ paneId, onClosed }: Props) {
     });
 
     // Attach-client mouse, per live-server probing (see protocol-notes):
-    // the server never sends MouseCapture to attach clients, strips the
-    // pane's mode-enable sequences from frames, has no attach-mouse wire
-    // message, and unconditionally types Input bytes into the pty (garbage
-    // at a shell prompt). So clicks stay off until the server can say the
-    // pane wants them — the SGR path below is gated on that future signal.
-    // Wheel already works: AttachScroll is routed server-side.
+    // the server gives attach clients no mouse-state signal and no click
+    // message, but Input bytes reach the pty verbatim — a probed SGR click
+    // moves vim's cursor to the exact cell. Blind forwarding types garbage
+    // into shells, so clicks forward only where a mouse-tracking app is
+    // known to live: agent panes (Claude Code's UI, …), or whenever the
+    // server someday says the pane owns the mouse. Wheel stays on
+    // AttachScroll, which the server already routes correctly.
+    const forwardClicks = () => mouseCaptured || agentPaneRef.current;
     let buttonHeld = -1;
     const cellAt = (event: MouseEvent) => {
       const rect = host.getBoundingClientRect();
@@ -178,16 +183,16 @@ export function TerminalView({ paneId, onClosed }: Props) {
       paneInput(attachId, new TextEncoder().encode(seq)).catch(() => {});
     };
     const onMouseDown = (event: MouseEvent) => {
-      if (!mouseCaptured || event.shiftKey || event.button === 2) return;
+      if (!forwardClicks() || event.shiftKey || event.button === 2) return;
       buttonHeld = event.button === 1 ? 1 : 0;
       sgrMouse(buttonHeld, event, false);
     };
     const onMouseMove = (event: MouseEvent) => {
-      if (!mouseCaptured || buttonHeld < 0) return;
+      if (!forwardClicks() || buttonHeld < 0) return;
       sgrMouse(buttonHeld, event, false, true);
     };
     const onMouseUp = (event: MouseEvent) => {
-      if (!mouseCaptured || buttonHeld < 0) return;
+      if (!forwardClicks() || buttonHeld < 0) return;
       sgrMouse(buttonHeld, event, true);
       buttonHeld = -1;
     };
