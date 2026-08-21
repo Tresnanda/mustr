@@ -3,7 +3,20 @@
 All notable changes to Mustr. Versions are semver; each release states its
 herdr protocol compatibility.
 
-## 0.1.0 — unreleased
+## 0.1.1 — 2026-08-21
+
+Compatible with **herdr 0.8.0 / protocol 19**.
+
+- Fresh machines without herdr now see the "Herdr isn't installed" screen
+  (with a Get herdr link) instead of a misleading "start herdr in a terminal"
+  message; Check again now reports what it finds.
+- One-line curl installer (`install.sh`) that sidesteps Gatekeeper's
+  "damaged" dialog on the unsigned app.
+- macOS bundles are now signed with a stable identity: browser-downloaded
+  DMGs get the recoverable right-click → Open flow instead of "damaged",
+  and macOS permissions survive updates.
+
+## 0.1.0 — 2026-08-21
 
 First public release. Compatible with **herdr 0.8.0 / protocol 19**.
 

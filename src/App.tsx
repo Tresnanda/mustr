@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { motion, useReducedMotion } from "motion/react";
 import { Folder } from "@phosphor-icons/react";
@@ -118,6 +118,30 @@ export default function App() {
     tick,
     activeServerId,
   } = useMustr();
+
+  // Reconnect path that keeps its verdict: server_connect knows *why* the
+  // server is unreachable (herdr-not-installed vs a dead socket), while a
+  // failed snapshot only knows that it is. Routing the rejection into
+  // serverError is what lets the missing-herdr screen render at all.
+  const connectAndRefresh = useCallback(
+    () =>
+      connectServer(useMustr.getState().activeServerId)
+        .then(refresh)
+        .catch((error) => useMustr.setState({ serverError: String(error) })),
+    [refresh],
+  );
+
+  // One automatic attempt per failure streak, so a fresh machine lands on
+  // "Herdr isn't installed" without having to click Check again.
+  const autoConnectTried = useRef(false);
+  useEffect(() => {
+    if (!serverError) {
+      autoConnectTried.current = false;
+    } else if (!autoConnectTried.current) {
+      autoConnectTried.current = true;
+      void connectAndRefresh();
+    }
+  }, [serverError, connectAndRefresh]);
 
   useEffect(() => {
     void refresh();
@@ -280,7 +304,7 @@ export default function App() {
               <EmptyState
                 serverError={serverError}
                 onInstall={() => void openUrl("https://herdr.dev")}
-                onRetry={() => void connectServer(activeServerId).then(refresh)}
+                onRetry={() => void connectAndRefresh()}
               />
             </div>
           )}
