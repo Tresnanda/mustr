@@ -46,6 +46,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          # Stable self-signed Apple identity: turns Gatekeeper's fatal
+          # "damaged" dialog on browser downloads into the recoverable
+          # right-click → Open flow, and keeps macOS permissions across
+          # updates. Not notarization — the curl installer stays the
+          # zero-dialog path.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: "Mustr Self-Signed"
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Mustr ${{ github.ref_name }}
