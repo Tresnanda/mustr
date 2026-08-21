@@ -13,11 +13,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-14 # Apple Silicon
-            target: aarch64-apple-darwin
-          - runner: macos-13 # Intel
-            target: x86_64-apple-darwin
-    runs-on: ${{ matrix.runner }}
+          - target: aarch64-apple-darwin
+          # Intel runners are retired; cross-compile on Apple Silicon.
+          - target: x86_64-apple-darwin
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
