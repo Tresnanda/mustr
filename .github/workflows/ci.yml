@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check frontend
+        run: pnpm exec tsc --noEmit
+
+      - name: Build frontend
+        run: pnpm build
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Check Rust core
+        working-directory: src-tauri
+        run: cargo check --locked
+
+  protocol-pin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify herdr protocol pin
+        run: |
+          set -euo pipefail
+          source <(grep -E '^(tag|path|sha256|protocol)=' .github/herdr-pin)
+          curl -fsSL -o /tmp/upstream-wire.rs \
+            "https://raw.githubusercontent.com/herdrdev/herdr/${tag}/${path}"
+          actual=$(sha256sum /tmp/upstream-wire.rs | cut -d' ' -f1)
+          if [ "$actual" != "$sha256" ]; then
+            echo "::error::Upstream ${tag} ${path} no longer matches the recorded pin."
+            echo "recorded: $sha256"
+            echo "actual:   $actual"
+            exit 1
+          fi
+          vendored=$(grep -E 'pub const PROTOCOL_VERSION: u32 = [0-9]+' \
+            src-tauri/src/protocol/wire.rs | grep -oE '[0-9]+')
+          if [ "$vendored" != "$protocol" ]; then
+            echo "::error::Vendored PROTOCOL_VERSION ($vendored) differs from the pin ($protocol). Re-vendor consciously and update .github/herdr-pin."
+            exit 1
+          fi
+          echo "Pin holds: herdr ${tag}, protocol ${protocol}."

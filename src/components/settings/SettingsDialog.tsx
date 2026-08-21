@@ -12,6 +12,53 @@ import { useMustr } from "../../state/store";
 import { DIALOG_CONTENT, DIALOG_OVERLAY, DIALOG_SHADOW } from "../ui/menu";
 import { MustrMark } from "../ui/MustrMark";
 import { springSettle } from "../../design/motion";
+import { checkForUpdate, installUpdate, restartToUpdate, useUpdateState } from "../../lib/updates";
+
+/** One line under the version: state text or the single next action. */
+function UpdateRow() {
+  const update = useUpdateState();
+  const link =
+    "rounded-md px-1 text-[12.5px] text-text-secondary underline decoration-[rgb(255_255_255/0.2)] " +
+    "underline-offset-2 transition-[color] duration-[var(--dur-fast)] hover:text-text-primary";
+
+  if (update.phase === "checking")
+    return <span className="text-[12.5px] text-text-muted" role="status">Checking…</span>;
+  if (update.phase === "none")
+    return <span className="text-[12.5px] text-text-muted" role="status">You're up to date</span>;
+  if (update.phase === "downloading")
+    return (
+      <span className="text-[12.5px] tabular-nums text-text-muted" role="status">
+        Downloading {update.version}
+        {update.percent !== null ? ` — ${update.percent}%` : "…"}
+      </span>
+    );
+  if (update.phase === "available")
+    return (
+      <button type="button" onClick={() => void installUpdate()} className={link}>
+        Update to {update.version}
+      </button>
+    );
+  if (update.phase === "ready")
+    return (
+      <button type="button" onClick={() => void restartToUpdate()} className={link}>
+        Restart to finish updating
+      </button>
+    );
+  if (update.phase === "error")
+    return (
+      <span className="flex items-center gap-2">
+        <span className="text-[12.5px] text-text-muted">Unable to check for updates</span>
+        <button type="button" onClick={() => void checkForUpdate()} className={link}>
+          Try again
+        </button>
+      </span>
+    );
+  return (
+    <button type="button" onClick={() => void checkForUpdate()} className={link}>
+      Check for updates
+    </button>
+  );
+}
 
 function ToggleRow({
   label,
@@ -182,6 +229,7 @@ export function SettingsDialog({
             <span className="text-[11px] tabular-nums">
               Mustr{version ? ` ${version}` : ""}
             </span>
+            <UpdateRow />
           </div>
         </Dialog.Content>
       </Dialog.Portal>

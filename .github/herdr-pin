@@ -1,0 +1,7 @@
+# Herdr protocol pin. CI fails if the pinned tag's wire.rs upstream stops
+# matching this hash, or if the vendored copy's PROTOCOL_VERSION drifts —
+# forcing a conscious re-vendor instead of a silent wire mismatch.
+tag=v0.8.0
+path=src/protocol/wire.rs
+sha256=e44fe71f419905f0929ac8bbcc978feb2814141f0e07d2754980656633f9584a
+protocol=19

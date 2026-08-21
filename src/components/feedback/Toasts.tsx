@@ -52,8 +52,24 @@ export function Toasts() {
         }
       },
     );
+    // A found update gets one quiet mention; Settings carries the action.
+    const onUpdate = (e: Event) => {
+      const version = (e as CustomEvent<{ version: string }>).detail.version;
+      put(
+        {
+          key: "app-update",
+          text: `Mustr ${version} is available — update from Settings`,
+          spinning: false,
+          sticky: false,
+        },
+        8000,
+      );
+    };
+    window.addEventListener("mustr:update-available", onUpdate);
+
     return () => {
       unlisten.then((fn) => fn());
+      window.removeEventListener("mustr:update-available", onUpdate);
     };
   }, [servers.length]);
 

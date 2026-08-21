@@ -11,6 +11,7 @@ import { TipProvider } from "./components/ui/Tip";
 import { Navigator } from "./components/command/Navigator";
 import { ShortcutsHelp } from "./components/ShortcutsHelp";
 import { Toasts } from "./components/feedback/Toasts";
+import { scheduleStartupCheck } from "./lib/updates";
 import { ClosePaneDialog } from "./components/panes/ClosePaneDialog";
 import { BTN, BTN_PRIMARY } from "./components/ui/menu";
 import { MustrMark } from "./components/ui/MustrMark";
@@ -120,6 +121,7 @@ export default function App() {
 
   useEffect(() => {
     void refresh();
+    scheduleStartupCheck();
     // Events are tagged with the server they came from; this window only
     // mirrors its own. Any conn change refreshes the registry so the
     // session switcher stays honest across windows.
