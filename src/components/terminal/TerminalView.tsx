@@ -90,6 +90,13 @@ export function TerminalView({ paneId, onClosed }: Props) {
     searchRef.current?.clearDecorations();
   }, [findOpen, isFocusedPane]);
 
+  // Only the focused pane blinks; every other mounted terminal holds a
+  // steady cursor so it can settle to 0% and let the GPU process sleep.
+  useEffect(() => {
+    const term = termRef.current;
+    if (term) term.options.cursorBlink = isFocusedPane;
+  }, [isFocusedPane]);
+
   // Tunnel restored (e.g. after sleep or a network drop): retry an
   // attachment that exhausted its backoff instead of staying dead.
   useEffect(() => {
@@ -112,7 +119,11 @@ export function TerminalView({ paneId, onClosed }: Props) {
       fontSize: useMustr.getState().termFontSize,
       lineHeight: 1.0,
       scrollback: 0,
-      cursorBlink: true,
+      // Blink only while focused: a blinking cursor forces a repaint every
+      // ~500ms forever, and through the glass that also wakes the GPU
+      // process — so idle/unfocused panes must not blink (see the focus
+      // effect below, which keeps this in sync).
+      cursorBlink: useMustr.getState().selectedPaneId === paneId,
       allowProposedApi: true,
       allowTransparency: !REDUCED_TRANSPARENCY,
       theme: THEME,
@@ -135,8 +146,10 @@ export function TerminalView({ paneId, onClosed }: Props) {
       if (host.clientWidth > 0 && host.clientHeight > 0) fit.fit();
     };
     if (REDUCED_TRANSPARENCY) {
-      // WebGL renders faster but cannot composite transparency; the DOM
-      // renderer carries the glass look.
+      // WebGL renders faster but cannot composite transparency: on the glass
+      // it fills dim-text and selection cells with an opaque black box
+      // (verified regression, addon-webgl 0.19). The DOM renderer carries the
+      // glass look; WebGL is only safe in the solid reduced-transparency mode.
       try {
         term.loadAddon(new WebglAddon());
       } catch {
