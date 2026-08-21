@@ -19,7 +19,9 @@ const MIN_PANE_PX = 80;
 const HANDLE_PX = 7;
 
 function minRatioFor(span: number) {
-  return Math.min(0.4, MIN_PANE_PX / Math.max(1, span));
+  // The server clamps ratios to 0.1–0.9 (layout.rs); flooring below that
+  // would just snap back on the next refresh.
+  return Math.max(0.1, Math.min(0.4, MIN_PANE_PX / Math.max(1, span)));
 }
 
 function rubberband(overshoot: number, dimension: number, constant = 0.55) {

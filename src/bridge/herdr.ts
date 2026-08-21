@@ -112,12 +112,21 @@ export async function layoutExport(tabId: string): Promise<{ root: LayoutNode; f
   return result.layout;
 }
 
+/** The wire's split path is Vec<bool> (false = first, true = second);
+    string paths are a UI-side convenience. The server clamps ratio to
+    0.1–0.9 (layout.rs), so callers should floor accordingly. */
 export const setSplitRatio = (tabId: string, path: string[], ratio: number) =>
-  apiRequest("layout.set_split_ratio", { tab_id: tabId, path, ratio });
+  apiRequest("layout.set_split_ratio", {
+    tab_id: tabId,
+    path: path.map((step) => step === "second"),
+    ratio,
+  });
 
 export const focusPane = (paneId: string) => apiRequest("pane.focus", { pane_id: paneId });
+/** The param is target_pane_id — `pane_id` is silently ignored and the
+    split lands on the server-focused pane instead. */
 export const splitPane = (paneId: string, direction: "right" | "down") =>
-  apiRequest("pane.split", { pane_id: paneId, direction });
+  apiRequest("pane.split", { target_pane_id: paneId, direction, focus: true });
 export const closePane = (paneId: string) => apiRequest("pane.close", { pane_id: paneId });
 export const zoomPane = (paneId: string) => apiRequest("pane.zoom", { pane_id: paneId });
 export const createTab = (workspaceId: string) =>
@@ -170,17 +179,6 @@ export const paneResize = (attachId: string, cols: number, rows: number) =>
 
 export const paneScroll = (attachId: string, up: boolean, lines: number) =>
   invoke<void>("pane_scroll", { attachId, up, lines, column: null, row: null });
-
-export type MouseKind = "down" | "up" | "drag" | "move" | "scroll-up" | "scroll-down";
-export type MouseButton = "left" | "right" | "middle";
-export const paneMouse = (
-  attachId: string,
-  kind: MouseKind,
-  button: MouseButton,
-  col: number,
-  row: number,
-  modifiers = 0,
-) => invoke<void>("pane_mouse", { attachId, kind, button, col, row, modifiers });
 
 export const detachPane = (attachId: string) => invoke<void>("detach_pane", { attachId });
 

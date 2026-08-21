@@ -66,3 +66,35 @@ Mustr's tunnel deliberately opts **out** of the user's ControlMaster
 (`ControlMaster=no ControlPath=none`): under muxing an `ssh -N -L` child hands
 its forwards to the master and exits 0 immediately, which breaks
 child-process-liveness supervision (see servers.rs).
+
+## Attach-client mouse & layout (probed live against 0.8.0, 2026-08-21)
+
+Method: throwaway `#[ignore]` test (`src-tauri/src/herdr/probe_test.rs`) that
+creates a scratch workspace, attaches, and interrogates a real server.
+
+- **`MouseCapture` is never sent to TerminalAttach clients** — headless.rs
+  `stream_host_mouse_capture_mode` skips every client that isn't a full-app
+  client. Mustr cannot learn pane mouse state from the wire.
+- **Mode-enable sequences don't pass through**: a pane running
+  `printf '\e[?1002h\e[?1006h'` produces frames that never contain those
+  sequences — the renderer regenerates ANSI from cell state, so xterm.js
+  client-side mode tracking sees nothing.
+- **`ClientMessage::Input` bytes reach the pty verbatim** (typing works this
+  way), but SGR mouse sequences sent unconditionally render as garbage at a
+  shell prompt and corrupt the input line — always-forwarding clicks is unsafe.
+- **`ClientMessage::InputEvents` mouse events are routed against the server's
+  virtual TUI layout** (`route_client_events_from` → app coords), not the
+  attached pane — wrong coordinate space for attach clients, can misroute
+  into the sidebar of the virtual app.
+- **No attach-mouse wire message exists** in v0.8.0 (19) or v0.8.2 (20); only
+  `AttachScroll`, which the server routes correctly (mouse-report vs host
+  scrollback) — so wheel works, clicks need an upstream herdr addition
+  (an `AttachMouse` handled like `AttachScroll`'s MouseReport branch).
+- **`pane.split` takes `target_pane_id`** (`PaneSplitParams`) — a `pane_id`
+  param is silently ignored (serde default) and the split lands on the
+  server-focused pane. `pane.close`/`pane.focus`/`pane.get` use `PaneTarget`
+  with a required `pane_id`, so those are safe.
+- **`layout.set_split_ratio` takes `path: Vec<bool>`** (false = first,
+  true = second child), not strings — string paths fail deserialization and
+  the call errors, which is why nested-split drags used to snap back. The
+  server clamps ratio to **0.1–0.9** (`layout.rs set_ratio_at`).

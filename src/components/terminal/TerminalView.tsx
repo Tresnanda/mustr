@@ -20,7 +20,6 @@ import {
   decodeBase64,
   detachPane,
   paneInput,
-  paneMouse,
   paneResize,
   paneScroll,
 } from "../../bridge/herdr";
@@ -65,6 +64,14 @@ export function TerminalView({ paneId, onClosed }: Props) {
   const isFocusedPane = useMustr((s) => s.selectedPaneId === paneId);
   const [findQuery, setFindQuery] = useState("");
   const reduce = useReducedMotion();
+  /** Mirror of the server's MouseCapture signal, for the cursor. */
+  const [capturedUi, setCapturedUi] = useState(false);
+  // The server can't tell attach clients about pane mouse state (see
+  // protocol-notes), so the cursor falls back to what Mustr does know:
+  // agent panes are interactive UIs — arrow; plain shells are text — I-beam.
+  const isAgentPane = useMustr((s) =>
+    Boolean(s.panes.find((p) => p.pane_id === paneId)?.agent),
+  );
 
   // Live font size: applies to the running terminal, then refits.
   useEffect(() => {
@@ -144,50 +151,45 @@ export function TerminalView({ paneId, onClosed }: Props) {
       paneInput(attachId, bytes).catch(() => {});
     });
 
-    // The app owns the mouse when the server says so (MouseCapture), or
-    // when the mode-enable sequences reached xterm through the byte stream —
-    // whichever signal arrives, both the cursor and click routing follow it.
-    const isCaptured = () =>
-      mouseCaptured || (term.modes.mouseTrackingMode ?? "none") !== "none";
-    const syncCursor = () => {
-      host.classList.toggle("term-mouse-owned", isCaptured());
-    };
-
-    // Mouse-tracking apps (Claude Code's UI, htop, …) expect real clicks.
-    // Forward press, drag, and release as the wire's first-class Mouse
-    // messages (the server does not parse synthesized SGR bytes in Input).
-    // Shift bypasses forwarding so text selection always works (the same
-    // escape hatch real terminals use). Right-click stays ours (context
-    // menu). Coordinates are 0-based, matching the runtime's cell grid.
-    let buttonHeld: "left" | "middle" | null = null;
-    const cellAt0 = (event: MouseEvent) => {
+    // Attach-client mouse, per live-server probing (see protocol-notes):
+    // the server never sends MouseCapture to attach clients, strips the
+    // pane's mode-enable sequences from frames, has no attach-mouse wire
+    // message, and unconditionally types Input bytes into the pty (garbage
+    // at a shell prompt). So clicks stay off until the server can say the
+    // pane wants them — the SGR path below is gated on that future signal.
+    // Wheel already works: AttachScroll is routed server-side.
+    let buttonHeld = -1;
+    const cellAt = (event: MouseEvent) => {
       const rect = host.getBoundingClientRect();
       const col = Math.min(
-        term.cols - 1,
-        Math.max(0, Math.floor(((event.clientX - rect.left) / rect.width) * term.cols)),
+        term.cols,
+        Math.max(1, Math.ceil(((event.clientX - rect.left) / rect.width) * term.cols)),
       );
       const row = Math.min(
-        term.rows - 1,
-        Math.max(0, Math.floor(((event.clientY - rect.top) / rect.height) * term.rows)),
+        term.rows,
+        Math.max(1, Math.ceil(((event.clientY - rect.top) / rect.height) * term.rows)),
       );
       return { col, row };
     };
+    const sgrMouse = (btn: number, event: MouseEvent, release: boolean, motion = false) => {
+      const { col, row } = cellAt(event);
+      const code = btn + (motion ? 32 : 0);
+      const seq = `\x1b[<${code};${col};${row}${release ? "m" : "M"}`;
+      paneInput(attachId, new TextEncoder().encode(seq)).catch(() => {});
+    };
     const onMouseDown = (event: MouseEvent) => {
-      if (!isCaptured() || event.shiftKey || event.button === 2) return;
-      buttonHeld = event.button === 1 ? "middle" : "left";
-      const { col, row } = cellAt0(event);
-      paneMouse(attachId, "down", buttonHeld, col, row).catch(() => {});
+      if (!mouseCaptured || event.shiftKey || event.button === 2) return;
+      buttonHeld = event.button === 1 ? 1 : 0;
+      sgrMouse(buttonHeld, event, false);
     };
     const onMouseMove = (event: MouseEvent) => {
-      if (!isCaptured() || !buttonHeld) return;
-      const { col, row } = cellAt0(event);
-      paneMouse(attachId, "drag", buttonHeld, col, row).catch(() => {});
+      if (!mouseCaptured || buttonHeld < 0) return;
+      sgrMouse(buttonHeld, event, false, true);
     };
     const onMouseUp = (event: MouseEvent) => {
-      if (!isCaptured() || !buttonHeld) return;
-      const { col, row } = cellAt0(event);
-      paneMouse(attachId, "up", buttonHeld, col, row).catch(() => {});
-      buttonHeld = null;
+      if (!mouseCaptured || buttonHeld < 0) return;
+      sgrMouse(buttonHeld, event, true);
+      buttonHeld = -1;
     };
     host.addEventListener("mousedown", onMouseDown);
     host.addEventListener("mousemove", onMouseMove);
@@ -207,15 +209,10 @@ export function TerminalView({ paneId, onClosed }: Props) {
       wheelAcc -= steps * LINE_PX;
       const up = steps < 0;
       const lines = Math.min(3, Math.abs(steps));
-      if (isCaptured()) {
-        // Child app owns the mouse: discrete wheel clicks at the cell.
-        const { col, row } = cellAt0(event);
-        for (let i = 0; i < lines; i++) {
-          paneMouse(attachId, up ? "scroll-up" : "scroll-down", "left", col, row).catch(() => {});
-        }
-      } else {
-        paneScroll(attachId, up, lines).catch(() => {});
-      }
+      // AttachScroll always: the server routes it into the pane as mouse
+      // reports when the child app tracks the mouse, host scrollback when
+      // it doesn't — knowledge only the server has.
+      paneScroll(attachId, up, lines).catch(() => {});
     };
     host.addEventListener("wheel", onWheel, { passive: false, capture: true });
 
@@ -248,13 +245,11 @@ export function TerminalView({ paneId, onClosed }: Props) {
             // A full repaint replaces the whole viewport; drop stale cells
             // first so regions the frame doesn't touch can't linger.
             if (event.full) term.write("\x1b[2J\x1b[H");
-            // Mode changes (mouse tracking on/off) ride the byte stream;
-            // re-check ownership once xterm has parsed this chunk.
-            term.write(decodeBase64(event.b64), syncCursor);
+            term.write(decodeBase64(event.b64));
             break;
           case "mouse_capture":
             mouseCaptured = event.enabled;
-            syncCursor();
+            setCapturedUi(event.enabled);
             break;
           case "closed":
             // Dropped (server restart, or another client took the terminal
@@ -362,7 +357,12 @@ export function TerminalView({ paneId, onClosed }: Props) {
           </motion.div>
         )}
       </AnimatePresence>
-      <div ref={hostRef} className="term-host h-full w-full select-text" />
+      <div
+        ref={hostRef}
+        className={`term-host h-full w-full select-text ${
+          capturedUi || isAgentPane ? "term-mouse-owned" : ""
+        }`}
+      />
     </div>
   );
 }

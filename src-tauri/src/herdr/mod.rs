@@ -8,3 +8,5 @@ pub mod paths;
 pub mod remotefs;
 pub mod servers;
 pub mod term;
+#[cfg(test)]
+mod probe_test;

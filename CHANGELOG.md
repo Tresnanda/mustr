@@ -3,6 +3,25 @@
 All notable changes to Mustr. Versions are semver; each release states its
 herdr protocol compatibility.
 
+## 0.1.2 — 2026-08-21
+
+Compatible with **herdr 0.8.0 / protocol 19**.
+
+- Fixed for real: dragging a nested split no longer snaps back. The wire's
+  split path is booleans, not "first"/"second" strings, so every nested
+  resize was being rejected server-side. Splits now go down to the server's
+  minimum (10%).
+- Fixed: splitting a pane now splits *that* pane — the API parameter is
+  `target_pane_id`, and the old `pane_id` was silently ignored, landing
+  splits on whichever pane the server considered focused.
+- The pointer now shows an arrow over panes running a detected agent and an
+  I-beam over plain shells.
+- Removed the 0.1.1 click-forwarding attempt: live-server probing showed
+  herdr 0.8.x gives attach clients no safe channel for clicks (no mouse
+  state signal, no attach-mouse message, raw bytes corrupt shell prompts).
+  Clicking TUIs needs an upstream herdr addition; findings are documented
+  in docs/protocol-notes.md. Wheel scrolling is unaffected (server-routed).
+
 ## 0.1.1 — 2026-08-21
 
 Compatible with **herdr 0.8.0 / protocol 19**.
