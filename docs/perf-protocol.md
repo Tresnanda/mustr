@@ -59,6 +59,27 @@ the release/PR description.
 
 ## Renderer memory
 
-Record footprint alongside RSS (`footprint` CLI or Activity Monitor's
-Memory column; RSS overstates). Target set in issue #1 follow-ups; fix
-only what a sample of the WebContent process actually indicts.
+Record footprint alongside RSS — RSS roughly doubles the real number.
+
+```sh
+R=$(ps -axo pid,comm | awk '/WebKit\.WebContent/{print $1}' | head -1)
+ps -o pid,rss,comm -p $R            # RSS (overstated)
+footprint $R | grep phys_footprint  # real memory — the number that matters
+```
+
+Baseline (v0.1.5, macOS Apple Silicon, 2 tabs, agents live, WARM_TABS=4):
+
+| Metric | WebContent renderer |
+|---|---|
+| RSS | ~280–300 MB |
+| phys_footprint | ~140–166 MB idle drift (peak ~200) |
+
+Finding (issue #2): the ~270 MB from #1 was RSS; real footprint is
+~150 MB and reclaims under memory pressure. Heap-dominated (WebKit
+Malloc ~173 MB dirty: React + one xterm per mounted pane across the
+warm-tab LRU), not scrollback — `TerminalView` runs `scrollback: 0`, so
+terminals retain only the viewport, and graphics memory is small and
+reclaimable. Churn test (switch every tab, open+close a tab, wait 10s)
+*lowered* footprint 166→151 MB: pane teardown frees cleanly, no leak.
+`WARM_TABS` (state/store.ts) is the only real lever — lowering it trades
+instant tab-switching for heap. Acceptable as-is; RSS was the red herring.
