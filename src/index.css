@@ -24,6 +24,7 @@
   --color-status-unknown: var(--status-unknown);
   --color-alive: var(--alive);
   --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
   --color-danger-soft: var(--danger-soft);
   --font-ui: var(--font-ui);
   --font-mono: var(--font-mono);
@@ -68,13 +69,191 @@ body {
 .status-dot-working {
   animation: status-pulse 2s ease-in-out infinite;
 }
+
+/* Overlay + dialog + popover enter/exit. Radix Presence waits on animationend.
+   Overlay and dialog share duration so they move as one unit. */
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes overlay-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes dialog-in {
+  from { opacity: 0; scale: 0.96; }
+  to { opacity: 1; scale: 1; }
+}
+@keyframes dialog-out {
+  from { opacity: 1; scale: 1; }
+  to { opacity: 0; scale: 0.98; }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    scale: 0.96;
+    translate: var(--pop-x, 0) var(--pop-y, 4px);
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+    translate: 0 0;
+  }
+}
+@keyframes pop-out {
+  from {
+    opacity: 1;
+    scale: 1;
+    translate: 0 0;
+  }
+  to {
+    opacity: 0;
+    scale: 0.98;
+    translate: var(--pop-x, 0) var(--pop-y, 4px);
+  }
+}
+
+.m-overlay {
+  animation: overlay-out 150ms var(--ease-out) both;
+}
+.m-overlay[data-state="open"] {
+  animation-name: overlay-in;
+  animation-duration: var(--dur-base);
+}
+
+.m-dialog {
+  animation: dialog-out 150ms var(--ease-out) both;
+}
+.m-dialog[data-state="open"] {
+  animation-name: dialog-in;
+  animation-duration: var(--dur-base);
+}
+
+.m-pop {
+  --pop-x: 0px;
+  --pop-y: 4px;
+  transform-origin: var(
+    --radix-dropdown-menu-content-transform-origin,
+    var(--radix-context-menu-content-transform-origin, center)
+  );
+  animation: pop-out 110ms var(--ease-out) both;
+}
+.m-pop[data-side="top"] { --pop-y: 4px; }
+.m-pop[data-side="bottom"] { --pop-y: -4px; }
+.m-pop[data-side="left"] { --pop-x: 4px; --pop-y: 0px; }
+.m-pop[data-side="right"] { --pop-x: -4px; --pop-y: 0px; }
+.m-pop[data-state="open"] {
+  animation-name: pop-in;
+  animation-duration: 160ms;
+}
+
+.m-tip {
+  transform-origin: var(--radix-tooltip-content-transform-origin, center);
+  animation: pop-out 90ms var(--ease-out) both;
+}
+.m-tip[data-state="delayed-open"] {
+  animation-name: pop-in;
+  animation-duration: 125ms;
+}
+.m-tip[data-state="instant-open"] {
+  animation: none;
+}
+
+/* Space disclosure: clip-reveal from the parent row. Transform/opacity can't
+   grow document flow; grid 0fr→1fr is the allowed expansion trick. A
+   transition (not keyframes, not a layout spring) so reversing mid-open
+   retargets from the live height. Exit is ~25% faster than enter. */
+.space-nest,
+.section-fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 150ms var(--ease-out);
+}
+.space-nest[data-open],
+.section-fold[data-open] {
+  grid-template-rows: 1fr;
+  transition-duration: var(--dur-base);
+}
+.space-nest[data-instant] {
+  transition: none;
+}
+.space-nest-inner,
+.section-fold-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Section caret: points right when folded, down when open. Same
+   duration as the fold so they read as one motion. Transform only. */
+.fold-caret {
+  display: block;
+  transform-origin: center;
+  transform: rotate(-90deg);
+  transition: transform 150ms var(--ease-out);
+}
+.fold-caret[data-open] {
+  transform: rotate(0deg);
+  transition-duration: var(--dur-base);
+}
+
+/* Transitions.dev — Icon swap. Two glyphs share one grid cell; the
+   matching one resolves in while the other fades out with blur and
+   scale. Drives StatusIcon (orb → dot and every other status change). */
+.t-icon-swap {
+  --icon-swap-dur: 250ms;
+  --icon-swap-blur: 2px;
+  --icon-swap-start-scale: 0.25;
+  --icon-swap-ease: ease-in-out;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+.t-icon-swap .t-icon {
+  grid-area: 1 / 1;
+  transition:
+    opacity   var(--icon-swap-dur) var(--icon-swap-ease),
+    filter    var(--icon-swap-dur) var(--icon-swap-ease),
+    transform var(--icon-swap-dur) var(--icon-swap-ease);
+  will-change: opacity, filter, transform;
+}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="a"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="b"] {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="b"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="a"] {
+  opacity: 0;
+  filter: blur(var(--icon-swap-blur));
+  transform: scale(var(--icon-swap-start-scale));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-icon-swap .t-icon { transition: none !important; }
+}
+
+html.theme-switching,
+html.theme-switching * {
+  transition: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .status-dot-working { animation: none; }
-  *,
-  *::before,
-  *::after {
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
+  .animate-spin { animation: none; }
+  .m-overlay,
+  .m-dialog,
+  .m-pop,
+  .m-tip {
+    animation: none;
+  }
+  .space-nest,
+  .space-nest[data-open],
+  .section-fold,
+  .section-fold[data-open],
+  .fold-caret,
+  .fold-caret[data-open] {
+    transition: none;
   }
 }
 

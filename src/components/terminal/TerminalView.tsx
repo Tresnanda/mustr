@@ -5,12 +5,15 @@
 // can't swallow it.
 
 import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { X } from "@phosphor-icons/react";
+import { MATERIAL_PANEL, MENU_SHADOW } from "../ui/menu";
 import { useMustr } from "../../state/store";
 import {
   attachPane,
@@ -20,6 +23,7 @@ import {
   paneResize,
   paneScroll,
 } from "../../bridge/herdr";
+import { tweenBase, tweenExit } from "../../design/motion";
 
 const REDUCED_TRANSPARENCY =
   typeof window !== "undefined" &&
@@ -50,11 +54,16 @@ export function TerminalView({ paneId, onClosed }: Props) {
   const fitRef = useRef<FitAddon | null>(null);
   const searchRef = useRef<SearchAddon | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Bumped when the server connection returns after this pane gave up,
+      remounting the attachment; a live attachment never remounts. */
+  const [epoch, setEpoch] = useState(0);
+  const connected = useMustr((s) => s.connected);
   const fontSize = useMustr((s) => s.termFontSize);
   const findOpen = useMustr((s) => s.findOpen);
   const setFindOpen = useMustr((s) => s.setFindOpen);
   const isFocusedPane = useMustr((s) => s.selectedPaneId === paneId);
   const [findQuery, setFindQuery] = useState("");
+  const reduce = useReducedMotion();
 
   // Live font size: applies to the running terminal, then refits.
   useEffect(() => {
@@ -69,6 +78,15 @@ export function TerminalView({ paneId, onClosed }: Props) {
     if (findOpen && isFocusedPane) return;
     searchRef.current?.clearDecorations();
   }, [findOpen, isFocusedPane]);
+
+  // Tunnel restored (e.g. after sleep or a network drop): retry an
+  // attachment that exhausted its backoff instead of staying dead.
+  useEffect(() => {
+    if (connected && error) {
+      setError(null);
+      setEpoch((e) => e + 1);
+    }
+  }, [connected, error]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -252,14 +270,14 @@ export function TerminalView({ paneId, onClosed }: Props) {
       searchRef.current = null;
       term.dispose();
     };
-  }, [paneId, onClosed]);
+  }, [paneId, onClosed, epoch]);
 
   if (error) {
     return (
       <div className="flex h-full items-center justify-center p-8">
         <div className="max-w-md text-center">
-          <p className="text-[13px] font-semibold text-text-primary">Unable to attach to this pane</p>
-          <p className="mt-1 text-[13px] text-text-secondary">{error}</p>
+          <p className="text-[13px] font-semibold text-balance text-text-primary">Unable to attach to this pane</p>
+          <p className="mt-1 text-[13px] leading-snug text-pretty text-text-secondary">{error}</p>
         </div>
       </div>
     );
@@ -274,33 +292,51 @@ export function TerminalView({ paneId, onClosed }: Props) {
   };
 
   return (
-    <div className="relative h-full py-3 pl-4 pr-1">
-      {findOpen && isFocusedPane && (
-        <div
-          className="absolute right-3 top-3 z-10 flex h-8 items-center gap-2 rounded-lg bg-[rgb(44_44_44/0.95)] px-2.5 backdrop-blur-xl"
-          style={{ boxShadow: "0 0 0 0.5px rgb(255 255 255 / 0.1), 0 6px 20px rgb(0 0 0 / 0.35)" }}
-        >
-          <input
-            autoFocus
-            value={findQuery}
-            onChange={(e) => {
-              setFindQuery(e.target.value);
-              searchRef.current?.findNext(e.target.value, { incremental: true });
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") runFind(e.shiftKey);
-              else if (e.key === "Escape") {
+    <div className="relative h-full py-4 ps-5 pe-2">
+      <AnimatePresence>
+        {findOpen && isFocusedPane && (
+          <motion.div
+            key="find"
+            initial={reduce ? false : { opacity: 0, y: -6, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.97, transition: tweenExit }}
+            transition={reduce ? { duration: 0 } : tweenBase}
+            className={`absolute top-3 right-3 z-10 flex h-8 origin-top-right items-center gap-1.5 rounded-lg px-2 ${MATERIAL_PANEL}`}
+            style={MENU_SHADOW}
+          >
+            <input
+              autoFocus
+              value={findQuery}
+              onChange={(e) => {
+                setFindQuery(e.target.value);
+                searchRef.current?.findNext(e.target.value, { incremental: true });
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") runFind(e.shiftKey);
+                else if (e.key === "Escape") {
+                  setFindOpen(false);
+                  termRef.current?.focus();
+                }
+              }}
+              placeholder="Find in terminal"
+              aria-label="Find in terminal"
+              style={{ outline: "none" }}
+              className="w-44 bg-transparent text-[12.5px] text-text-primary placeholder:text-text-muted"
+            />
+            <button
+              type="button"
+              aria-label="Close find"
+              onClick={() => {
                 setFindOpen(false);
                 termRef.current?.focus();
-              }
-            }}
-            placeholder="Find in terminal"
-            aria-label="Find in terminal"
-            style={{ outline: "none" }}
-            className="w-44 bg-transparent text-[12.5px] text-text-primary placeholder:text-text-muted"
-          />
-        </div>
-      )}
+              }}
+              className="flex size-6 shrink-0 items-center justify-center rounded-md text-text-muted transition-[color,scale] duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:text-text-primary active:scale-[0.97]"
+            >
+              <X size={12} aria-hidden />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div ref={hostRef} className="term-host h-full w-full select-text" />
     </div>
   );

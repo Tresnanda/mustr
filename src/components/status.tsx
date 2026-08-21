@@ -1,13 +1,15 @@
 // Agent-status grammar, ink edition. Shape + label carry the state; the only
 // color is blocked's amber. Toolbar status is plain text, not a chip.
+// State swaps use the transitions.dev icon swap: the outgoing glyph blurs
+// and shrinks away while the incoming one resolves in (see .t-icon-swap).
 
+import { useEffect, useRef, useState } from "react";
+import { useReducedMotion } from "motion/react";
 import { CheckCircle, Circle, WarningCircle } from "@phosphor-icons/react";
 import { ThinkingOrb } from "thinking-orbs";
 import type { AgentStatus } from "../bridge/herdr";
-
-const reducedMotion =
-  typeof window !== "undefined" &&
-  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+import { paneDisplayName } from "../lib/names";
+import { useMustr } from "../state/store";
 
 export const STATUS_LABEL: Record<AgentStatus, string> = {
   working: "Working",
@@ -17,14 +19,14 @@ export const STATUS_LABEL: Record<AgentStatus, string> = {
   unknown: "Shell",
 };
 
-export function StatusIcon({ status, size = 14 }: { status: AgentStatus; size?: number }) {
+function Glyph({ status, size, reduce }: { status: AgentStatus; size: number; reduce: boolean }) {
   switch (status) {
     case "done":
       return <CheckCircle size={size} weight="fill" color="var(--status-done)" aria-hidden />;
     case "blocked":
       return <WarningCircle size={size} weight="fill" color="var(--status-blocked)" aria-hidden />;
     case "working":
-      if (reducedMotion) {
+      if (reduce) {
         return (
           <span
             className="inline-block shrink-0 rounded-full bg-status-working"
@@ -35,7 +37,7 @@ export function StatusIcon({ status, size = 14 }: { status: AgentStatus; size?: 
       }
       return (
         <span className="inline-flex shrink-0" aria-hidden>
-          <ThinkingOrb state="working" size={20} theme="dark" />
+          <ThinkingOrb state="breathing" size={20} theme="dark" />
         </span>
       );
     case "idle":
@@ -43,4 +45,73 @@ export function StatusIcon({ status, size = 14 }: { status: AgentStatus; size?: 
     default:
       return <Circle size={size} weight="regular" color="var(--status-unknown)" aria-hidden />;
   }
+}
+
+/** How long .t-icon-swap takes (--icon-swap-dur) plus a little slack. */
+const SWAP_SETTLE_MS = 300;
+
+export function StatusIcon({ status, size = 14 }: { status: AgentStatus; size?: number }) {
+  const reduce = useReducedMotion();
+  // Double buffer for the CSS icon swap: the new status lands in the
+  // hidden slot, then data-state flips so CSS runs the cross-blur.
+  const [slots, setSlots] = useState<{ a: AgentStatus; b: AgentStatus; active: "a" | "b" }>({
+    a: status,
+    b: status,
+    active: "a",
+  });
+  if (slots[slots.active] !== status) {
+    setSlots(
+      slots.active === "a"
+        ? { a: slots.a, b: status, active: "b" }
+        : { a: status, b: slots.b, active: "a" },
+    );
+  }
+  // Once the swap settles, retire the hidden slot to the active status so
+  // an invisible orb doesn't keep animating behind the dot.
+  useEffect(() => {
+    const hidden = slots.active === "a" ? "b" : "a";
+    if (slots[hidden] === slots[slots.active]) return;
+    const t = setTimeout(
+      () =>
+        setSlots((s) =>
+          s.active === "a" ? { ...s, b: s.a } : { ...s, a: s.b },
+        ),
+      SWAP_SETTLE_MS,
+    );
+    return () => clearTimeout(t);
+  }, [slots]);
+
+  return (
+    <span className="t-icon-swap size-5 shrink-0" data-state={slots.active}>
+      <span className="t-icon inline-flex items-center justify-center" data-icon="a">
+        <Glyph status={slots.a} size={size} reduce={Boolean(reduce)} />
+      </span>
+      <span className="t-icon inline-flex items-center justify-center" data-icon="b">
+        <Glyph status={slots.b} size={size} reduce={Boolean(reduce)} />
+      </span>
+    </span>
+  );
+}
+
+/** Polite live region: announces selected-pane status changes, never the ticking age. */
+export function StatusAnnouncer() {
+  const { panes, selectedPaneId } = useMustr();
+  const pane = panes.find((p) => p.pane_id === selectedPaneId) ?? null;
+  const prev = useRef<string | null>(null);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!pane) return;
+    const key = `${pane.pane_id}:${pane.agent_status}`;
+    if (prev.current && prev.current !== key) {
+      setMessage(`${paneDisplayName(pane)}, ${STATUS_LABEL[pane.agent_status]}`);
+    }
+    prev.current = key;
+  }, [pane]);
+
+  return (
+    <div role="status" aria-live="polite" className="sr-only">
+      {message}
+    </div>
+  );
 }

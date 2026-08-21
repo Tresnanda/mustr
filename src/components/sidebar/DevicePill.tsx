@@ -3,17 +3,24 @@
 // Add Device saves a name + destination. Right-click a quickie to remove it.
 
 import { useEffect, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Dialog from "@radix-ui/react-dialog";
 import { CaretUpDown, Check, CircleNotch, Desktop, GearSix, HardDrives, Plus } from "@phosphor-icons/react";
 import { closeAutoFocus } from "../../lib/modality";
 import { useMustr } from "../../state/store";
-import { addServer, sshAliases, type ServerRow } from "../../bridge/servers";
+import { addServer, openHostWindow, sshAliases, type ServerRow } from "../../bridge/servers";
 import {
+  BTN,
+  BTN_PRIMARY,
   DIALOG_CONTENT,
   DIALOG_OVERLAY,
+  DIALOG_SHADOW,
+  FIELD,
+  MATERIAL_POP,
   MENU_CONTENT,
+  MENU_ITEM,
   MENU_ITEM_DANGER,
   MENU_SEPARATOR,
   MENU_SHADOW,
@@ -21,16 +28,24 @@ import {
 import { removeServer } from "../../bridge/servers";
 import { SettingsDialog } from "../settings/SettingsDialog";
 import { Tip } from "../ui/Tip";
+import { springPop } from "../../design/motion";
 
 function DeviceRow({ server }: { server: ServerRow }) {
-  const { switchServer, connectingId, loadServers } = useMustr();
+  const { switchServer, connectingId, loadServers, activeServerId } = useMustr();
   const connecting = connectingId === server.id;
+  const active = server.id === activeServerId;
   const Icon = server.kind === "local" ? Desktop : HardDrives;
+  const reduce = useReducedMotion();
+  const swap = reduce
+    ? { duration: 0 }
+    : { type: "spring" as const, duration: 0.3, bounce: 0 };
+  const enter = reduce ? false : { scale: 0.3, opacity: 0, filter: "blur(3px)" };
+  const leave = reduce ? { opacity: 0 } : { scale: 0.3, opacity: 0, filter: "blur(3px)" };
 
   const row = (
     <Dropdown.Item
       className={`flex h-auto w-full cursor-default items-center gap-3 rounded-[7px] px-2.5 py-2 text-text-primary outline-none data-[disabled]:opacity-60 data-[highlighted]:bg-[rgb(255_255_255/0.07)] ${
-        server.active ? "bg-[rgb(255_255_255/0.05)]" : ""
+        active ? "bg-[rgb(255_255_255/0.05)]" : ""
       }`}
       disabled={connecting}
       onSelect={(e) => {
@@ -47,26 +62,58 @@ function DeviceRow({ server }: { server: ServerRow }) {
           {server.detail}
         </span>
       </span>
-      {connecting ? (
-        <CircleNotch size={14} className="shrink-0 animate-spin text-text-secondary" aria-label="connecting" />
-      ) : server.active ? (
-        <Check size={14} weight="bold" className="shrink-0 text-text-primary" aria-label="connected" />
-      ) : null}
+      <span className="relative flex size-3.5 shrink-0 items-center justify-center">
+        <AnimatePresence mode="popLayout" initial={false}>
+          {connecting ? (
+            <motion.span
+              key="spin"
+              initial={enter}
+              animate={{ scale: 1, opacity: 1, filter: "blur(0px)" }}
+              exit={leave}
+              transition={swap}
+              className="inline-flex"
+            >
+              <CircleNotch size={14} className="animate-spin text-text-secondary" aria-label="connecting" />
+            </motion.span>
+          ) : active ? (
+            <motion.span
+              key="check"
+              initial={enter}
+              animate={{ scale: 1, opacity: 1, filter: "blur(0px)" }}
+              exit={leave}
+              transition={swap}
+              className="inline-flex"
+            >
+              <Check size={14} weight="bold" className="text-text-primary" aria-label="connected" />
+            </motion.span>
+          ) : null}
+        </AnimatePresence>
+      </span>
     </Dropdown.Item>
   );
 
-  if (server.kind === "local") return row;
   return (
     <ContextMenu.Root>
       <ContextMenu.Trigger asChild>{row}</ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content className={MENU_CONTENT} style={MENU_SHADOW}>
           <ContextMenu.Item
-            className={MENU_ITEM_DANGER}
-            onSelect={() => void removeServer(server.id).then(loadServers)}
+            className={MENU_ITEM}
+            onSelect={() => void openHostWindow(server.id).then(loadServers)}
           >
-            Remove device
+            Open in new window
           </ContextMenu.Item>
+          {server.kind === "ssh" && (
+            <>
+              <ContextMenu.Separator className={MENU_SEPARATOR} />
+              <ContextMenu.Item
+                className={MENU_ITEM_DANGER}
+                onSelect={() => void removeServer(server.id).then(loadServers)}
+              >
+                Remove device
+              </ContextMenu.Item>
+            </>
+          )}
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>
@@ -105,22 +152,20 @@ function AddDeviceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
       setName("");
       setHost("");
       setError(null);
-    } catch (e) {
-      setError(String(e));
+    } catch {
+      setError("Unable to add this device. Check the destination and try again.");
     }
   };
 
-  const FIELD =
-    "h-8 w-full rounded-lg border border-border-subtle bg-inset px-2.5 text-[13px] " +
-    "text-text-primary transition-colors duration-100 focus:border-border-strong";
+  const FIELD_CLASS = `${FIELD} mt-1.5`;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={DIALOG_OVERLAY} />
-        <Dialog.Content className={DIALOG_CONTENT} style={MENU_SHADOW}>
-          <Dialog.Title className="text-[13px] font-semibold text-text-primary">Add device</Dialog.Title>
-          <Dialog.Description className="mt-1.5 text-[13px] leading-snug text-text-secondary">
+        <Dialog.Content className={DIALOG_CONTENT} style={DIALOG_SHADOW}>
+          <Dialog.Title className="text-[13px] font-semibold text-balance text-text-primary">Add device</Dialog.Title>
+          <Dialog.Description className="mt-1.5 text-[13px] leading-snug text-pretty text-text-secondary">
             Connects over your own SSH setup — keys, agent, and config included.
           </Dialog.Description>
 
@@ -133,7 +178,7 @@ function AddDeviceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Mac Studio"
                 style={{ outline: "none" }}
-                className={`${FIELD} mt-1.5`}
+                className={FIELD_CLASS}
               />
             </label>
             <label className="relative block text-[12px] font-medium text-text-secondary">
@@ -169,15 +214,15 @@ function AddDeviceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
                 }}
                 placeholder="name@host or config alias"
                 style={{ outline: "none" }}
-                className={`${FIELD} mt-1.5 font-mono text-[12px]`}
+                className={`${FIELD_CLASS} font-mono text-[12px]`}
               />
               {suggesting && matches.length > 0 && (
                 <ul
                   id="ssh-alias-listbox"
                   role="listbox"
                   aria-label="Hosts from your SSH config"
-                  className="absolute inset-x-0 top-full z-10 mt-1 max-h-[148px] overflow-y-auto rounded-[9px] bg-[rgb(50_50_50/0.97)] p-1 backdrop-blur-xl"
-                  style={{ boxShadow: "0 0 0 0.5px rgb(255 255 255 / 0.09), 0 8px 24px rgb(0 0 0 / 0.4)" }}
+                  className={`absolute inset-x-0 top-full z-10 mt-1 max-h-[148px] overflow-y-auto rounded-[11px] p-[5px] ${MATERIAL_POP}`}
+                  style={MENU_SHADOW}
                 >
                   {matches.map((alias, i) => (
                     <li key={alias} role="option" aria-selected={i === activeIdx}>
@@ -189,7 +234,7 @@ function AddDeviceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
                           pick(alias);
                         }}
                         onMouseEnter={() => setActiveIdx(i)}
-                        className={`flex h-[26px] w-full items-center rounded-[6px] px-2 text-left font-mono text-[12px] ${
+                        className={`flex h-6 w-full items-center rounded-[6px] px-2 text-left font-mono text-[12px] ${
                           i === activeIdx ? "bg-[rgb(255_255_255/0.1)] text-text-primary" : "text-text-secondary"
                         }`}
                       >
@@ -205,18 +250,11 @@ function AddDeviceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
 
           <div className="mt-5 flex justify-end gap-2">
             <Dialog.Close asChild>
-              <button
-                type="button"
-                className="rounded-lg px-3 py-1.5 text-[13px] text-text-primary transition-colors duration-100 hover:bg-hover active:scale-[0.97]"
-              >
+              <button type="button" className={BTN}>
                 Cancel
               </button>
             </Dialog.Close>
-            <button
-              type="button"
-              onClick={() => void save()}
-              className="rounded-lg bg-selection px-3 py-1.5 text-[13px] font-medium text-text-primary transition-colors duration-100 hover:bg-active active:scale-[0.97]"
-            >
+            <button type="button" onClick={() => void save()} className={BTN_PRIMARY}>
               Add device
             </button>
           </div>
@@ -228,6 +266,7 @@ function AddDeviceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
 
 export function DevicePill() {
   const { server, connected, servers, activeServerId, connectError, loadServers } = useMustr();
+  const reduce = useReducedMotion();
   const [adding, setAdding] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -249,32 +288,38 @@ export function DevicePill() {
   const active = servers.find((s) => s.id === activeServerId);
 
   return (
-    <div className="flex shrink-0 items-center gap-1 px-3 pb-3 pt-1">
+    <div className="flex shrink-0 items-center gap-1 px-3.5 pt-1.5 pb-3">
       <div className="min-w-0 flex-1">
       <Dropdown.Root>
         <Dropdown.Trigger asChild>
           <button
             type="button"
-            className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors duration-100 hover:bg-hover data-[state=open]:bg-hover"
+            className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left transition-[background-color] duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:bg-hover data-[state=open]:bg-hover"
           >
-            <span className="relative flex size-6 shrink-0 items-center justify-center rounded-full bg-hover">
+            <span className="relative flex size-7 shrink-0 items-center justify-center rounded-full bg-hover">
               {active?.kind === "ssh" ? (
-                <HardDrives size={13} className="text-text-secondary" aria-hidden />
+                <HardDrives size={14} weight="light" className="text-text-secondary" aria-hidden />
               ) : (
-                <Desktop size={13} className="text-text-secondary" aria-hidden />
+                <Desktop size={14} weight="light" className="text-text-secondary" aria-hidden />
               )}
-              <span
-                className={`absolute -bottom-px -right-px size-[7px] rounded-full border-2 border-sidebar ${
-                  connected ? "bg-alive" : "bg-status-blocked"
-                }`}
-                aria-label={connected ? "connected" : "offline"}
-              />
+              <AnimatePresence initial={false}>
+                <motion.span
+                  key={connected ? "on" : "off"}
+                  initial={reduce ? false : { scale: 0.5 }}
+                  animate={{ scale: 1 }}
+                  transition={reduce ? { duration: 0 } : springPop}
+                  className={`absolute -right-px -bottom-px size-[7px] rounded-full border-2 border-sidebar ${
+                    connected ? "bg-alive" : "bg-status-blocked"
+                  }`}
+                  aria-label={connected ? "connected" : "offline"}
+                />
+              </AnimatePresence>
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium text-text-primary">
+              <span className="block truncate text-[13px] font-medium tracking-[-0.01em] text-text-primary">
                 {active?.name ?? "Local"}
               </span>
-              <span className="block truncate text-[11.5px] text-text-secondary">
+              <span className="mt-px block truncate text-[11.5px] leading-tight text-text-muted">
                 {active?.kind === "ssh"
                   ? active.detail
                   : server
@@ -282,7 +327,7 @@ export function DevicePill() {
                     : "This Mac"}
               </span>
             </span>
-            <CaretUpDown size={12} className="shrink-0 text-text-muted" aria-hidden />
+            <CaretUpDown size={12} weight="light" className="shrink-0 text-text-muted" aria-hidden />
           </button>
         </Dropdown.Trigger>
 
@@ -295,15 +340,15 @@ export function DevicePill() {
             className={`${MENU_CONTENT} w-72`}
             style={MENU_SHADOW}
           >
-            <Dropdown.Label className="px-2.5 pb-1.5 pt-1.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-text-muted">
+            <Dropdown.Label className="px-2.5 pt-1.5 pb-1.5 text-[10.5px] font-semibold tracking-[0.02em] text-text-muted uppercase">
               Devices
             </Dropdown.Label>
             {servers.map((s) => (
               <DeviceRow key={s.id} server={s} />
             ))}
             {connectError && (
-              <p className="select-text px-2.5 py-1.5 text-[11.5px] leading-snug text-danger">
-                {connectError}
+              <p className="select-text px-2.5 py-1.5 text-[11.5px] leading-snug text-pretty text-danger">
+                Unable to connect. Check the destination and try again.
               </p>
             )}
             <Dropdown.Separator className={MENU_SEPARATOR} />
@@ -326,9 +371,9 @@ export function DevicePill() {
           type="button"
           aria-label="Settings"
           onClick={() => setSettingsOpen(true)}
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors duration-100 hover:bg-hover hover:text-text-primary active:scale-[0.94]"
+          className="relative flex size-8 shrink-0 items-center justify-center rounded-md text-text-muted transition-[color,background-color,scale] duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:bg-hover hover:text-text-primary active:scale-[0.97]"
         >
-          <GearSix size={15} aria-hidden />
+          <GearSix size={16} weight="light" aria-hidden />
         </button>
       </Tip>
 

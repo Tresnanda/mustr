@@ -18,10 +18,11 @@ use herdr::term::{Attachment, TermEvent};
 struct Attachments(Mutex<HashMap<String, Arc<Attachment>>>);
 
 /// Generic JSON API passthrough: the frontend calls herdr methods directly
-/// (`ping`, `pane.list`, `session.snapshot`, `pane.split`, ...).
+/// (`ping`, `pane.list`, `session.snapshot`, `pane.split`, ...). Each
+/// window passes the server id it is bound to.
 #[tauri::command]
-fn api_request(method: String, params: Option<Value>) -> Result<Value, String> {
-    herdr::api::request(None, &method, params.unwrap_or_else(|| serde_json::json!({})))
+fn api_request(server: String, method: String, params: Option<Value>) -> Result<Value, String> {
+    herdr::api::request(&server, &method, params.unwrap_or_else(|| serde_json::json!({})))
 }
 
 #[tauri::command]
@@ -49,22 +50,78 @@ fn server_remove(id: String) -> Result<Vec<ServerRow>, String> {
     herdr::servers::remove(&id)
 }
 
-/// Blocking is fine: non-async commands run off the main thread, and the
-/// frontend shows a connecting state meanwhile.
+/// Ensure a live connection for this server id (no-op when already
+/// pooled) and its event stream. Blocking is fine: non-async commands run
+/// off the main thread, and the frontend shows a connecting state.
 #[tauri::command]
-fn server_connect(id: String) -> Result<String, String> {
-    if id == "local" {
-        herdr::servers::switch_to_local()?;
-    } else if let Some(session) = id.strip_prefix("local:") {
-        herdr::servers::switch_to_local_session(Some(session))?;
-    } else {
-        herdr::servers::connect_remote(&id)?;
+fn server_connect(app: tauri::AppHandle, id: String) -> Result<String, String> {
+    herdr::servers::connect(&id)?;
+    herdr::events::ensure_stream(app, id.clone());
+    Ok(id)
+}
+
+#[tauri::command]
+fn server_disconnect(id: String) -> Vec<ServerRow> {
+    herdr::servers::disconnect(&id);
+    herdr::servers::list()
+}
+
+/// Open (or focus) a dedicated window bound to one server, so several
+/// hosts can be on screen at once. The window's URL carries the id.
+#[tauri::command]
+fn open_host_window(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    use tauri::Manager;
+
+    herdr::servers::connect(&id)?;
+    herdr::events::ensure_stream(app.clone(), id.clone());
+
+    let safe: String = id
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let label = format!("host-{safe}");
+    if let Some(win) = app.get_webview_window(&label) {
+        let _ = win.set_focus();
+        return Ok(());
     }
-    Ok(herdr::servers::active_id())
+
+    let name = herdr::servers::list()
+        .into_iter()
+        .find(|s| s.id == id)
+        .map(|s| s.name)
+        .unwrap_or_else(|| id.clone());
+
+    let win = tauri::WebviewWindowBuilder::new(
+        &app,
+        &label,
+        tauri::WebviewUrl::App(format!("index.html?server={id}").into()),
+    )
+    .title(format!("Mustr — {name}"))
+    .inner_size(1200.0, 780.0)
+    .min_inner_size(720.0, 480.0)
+    .title_bar_style(tauri::TitleBarStyle::Overlay)
+    .hidden_title(true)
+    .transparent(true)
+    .build()
+    .map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "macos")]
+    {
+        use tauri::window::{Effect, EffectsBuilder};
+        let _ = win.set_effects(
+            EffectsBuilder::new()
+                .effect(Effect::UnderWindowBackground)
+                .build(),
+        );
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = win;
+    Ok(())
 }
 
 #[tauri::command]
 fn attach_pane(
+    server: String,
     attach_id: String,
     target: String,
     cols: u16,
@@ -76,7 +133,7 @@ fn attach_pane(
     if let Some(old) = state.0.lock().unwrap().remove(&attach_id) {
         old.detach();
     }
-    let attachment = Attachment::open(None, &target, cols, rows, move |event| {
+    let attachment = Attachment::open(&server, &target, cols, rows, move |event| {
         let _ = on_event.send(event);
     })?;
     state.0.lock().unwrap().insert(attach_id, attachment);
@@ -139,10 +196,10 @@ pub fn run() {
             // Establish the local server (auto-spawning herdr if needed)
             // before the event loop starts hammering a dead socket.
             std::thread::spawn(|| {
-                let _ = herdr::servers::switch_to_local();
+                let _ = herdr::servers::connect("local");
             });
             herdr::servers::spawn_supervisor(app.handle().clone());
-            herdr::events::spawn(app.handle().clone());
+            herdr::events::ensure_stream(app.handle().clone(), "local".into());
             #[cfg(target_os = "macos")]
             {
                 use tauri::window::{Effect, EffectsBuilder};
@@ -166,6 +223,8 @@ pub fn run() {
             ssh_aliases,
             server_remove,
             server_connect,
+            server_disconnect,
+            open_host_window,
             attach_pane,
             pane_input,
             pane_resize,

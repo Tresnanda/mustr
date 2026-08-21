@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { DIALOG_CONTENT, DIALOG_OVERLAY, MENU_SHADOW } from "./menu";
+import { BTN, BTN_PRIMARY, DIALOG_CONTENT, DIALOG_OVERLAY, FIELD, DIALOG_SHADOW } from "./menu";
 
 export function RenameDialog({
   open,
@@ -35,8 +35,10 @@ export function RenameDialog({
     >
       <Dialog.Portal>
         <Dialog.Overlay className={DIALOG_OVERLAY} />
-        <Dialog.Content className={DIALOG_CONTENT} style={MENU_SHADOW}>
-          <Dialog.Title className="text-[13px] font-semibold text-text-primary">{title}</Dialog.Title>
+        <Dialog.Content className={DIALOG_CONTENT} style={DIALOG_SHADOW}>
+          <Dialog.Title className="text-[13px] font-semibold text-balance text-text-primary">
+            {title}
+          </Dialog.Title>
           <input
             autoFocus
             value={value}
@@ -46,22 +48,15 @@ export function RenameDialog({
             }}
             aria-label={title}
             style={{ outline: "none" }}
-            className="mt-3 h-8 w-full rounded-lg border border-border-subtle bg-inset px-2.5 text-[13px] text-text-primary transition-colors duration-100 focus:border-border-strong"
+            className={`${FIELD} mt-3`}
           />
           <div className="mt-4 flex justify-end gap-2">
             <Dialog.Close asChild>
-              <button
-                type="button"
-                className="rounded-lg px-3 py-1.5 text-[13px] text-text-primary transition-colors duration-100 hover:bg-hover active:scale-[0.97]"
-              >
+              <button type="button" className={BTN}>
                 Cancel
               </button>
             </Dialog.Close>
-            <button
-              type="button"
-              onClick={commit}
-              className="rounded-lg bg-selection px-3 py-1.5 text-[13px] font-medium text-text-primary transition-colors duration-100 hover:bg-active active:scale-[0.97]"
-            >
+            <button type="button" onClick={commit} className={BTN_PRIMARY}>
               Rename
             </button>
           </div>

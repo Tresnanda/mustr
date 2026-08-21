@@ -19,8 +19,8 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
       return (
         <div className="flex h-full items-center justify-center bg-content p-8">
           <div className="max-w-lg">
-            <p className="text-[13px] font-semibold text-text-primary">Mustr hit an error</p>
-            <pre className="mt-2 select-text whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed text-status-blocked">
+            <p className="text-[13px] font-semibold text-balance text-text-primary">Mustr hit an error</p>
+            <pre className="mt-2 select-text font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap text-status-blocked">
               {String(this.state.error.stack ?? this.state.error)}
             </pre>
           </div>

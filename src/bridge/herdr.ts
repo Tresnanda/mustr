@@ -3,6 +3,15 @@
 
 import { Channel, invoke } from "@tauri-apps/api/core";
 
+/** Server this window talks to. Per-host windows carry `?server=` in
+    their URL; the main window starts on Local and can be retargeted. */
+let serverId = new URLSearchParams(window.location.search).get("server") ?? "local";
+
+export const windowServerId = () => serverId;
+export function setBridgeServer(id: string) {
+  serverId = id;
+}
+
 export type AgentStatus = "working" | "blocked" | "done" | "idle" | "unknown";
 
 export interface PaneInfo {
@@ -85,7 +94,7 @@ export async function apiRequest<T = unknown>(
   method: string,
   params: Record<string, unknown> = {},
 ): Promise<T> {
-  return invoke<T>("api_request", { method, params });
+  return invoke<T>("api_request", { server: serverId, method, params });
 }
 
 export const ping = () => apiRequest<ServerInfo>("ping");
@@ -147,7 +156,7 @@ export function attachPane(
 ): Promise<void> {
   const channel = new Channel<TermEvent>();
   channel.onmessage = onEvent;
-  return invoke("attach_pane", { attachId, target, cols, rows, onEvent: channel });
+  return invoke("attach_pane", { server: serverId, attachId, target, cols, rows, onEvent: channel });
 }
 
 export function paneInput(attachId: string, data: Uint8Array): Promise<void> {

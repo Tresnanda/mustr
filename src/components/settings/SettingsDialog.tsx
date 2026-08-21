@@ -2,12 +2,16 @@
 // applies immediately (no Save button to babysit).
 
 import { useEffect, useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Minus, Plus } from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { getVersion } from "@tauri-apps/api/app";
 import { listPlugins } from "../../bridge/herdr";
 import { useMustr } from "../../state/store";
-import { DIALOG_CONTENT, DIALOG_OVERLAY, MENU_SHADOW } from "../ui/menu";
+import { DIALOG_CONTENT, DIALOG_OVERLAY, DIALOG_SHADOW } from "../ui/menu";
+import { MustrMark } from "../ui/MustrMark";
+import { springSettle } from "../../design/motion";
 
 function ToggleRow({
   label,
@@ -20,13 +24,14 @@ function ToggleRow({
   on: boolean;
   onChange: (on: boolean) => void;
 }) {
+  const reduce = useReducedMotion();
   return (
     <button
       type="button"
       role="switch"
       aria-checked={on}
       onClick={() => onChange(!on)}
-      className="flex w-full items-center gap-3 rounded-lg px-1 py-1.5 text-left transition-colors duration-100 hover:bg-hover"
+      className="flex w-full items-center gap-3 rounded-lg px-1 py-1.5 text-left transition-[background-color] duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:bg-hover"
     >
       <span className="min-w-0 flex-1">
         <span className="block text-[13px] text-text-primary">{label}</span>
@@ -34,15 +39,15 @@ function ToggleRow({
       </span>
       <span
         aria-hidden
-        className={`relative h-[18px] w-8 shrink-0 rounded-full transition-colors duration-150 ${
+        className={`relative h-[18px] w-8 shrink-0 rounded-full transition-[background-color] duration-[var(--dur-base)] ease-[var(--ease-out)] ${
           on ? "bg-alive" : "bg-[rgb(255_255_255/0.14)]"
         }`}
       >
-        <span
-          className={`absolute top-[2px] size-[14px] rounded-full bg-white transition-transform duration-150 ${
-            on ? "translate-x-[16px]" : "translate-x-[2px]"
-          }`}
-          style={{ transitionTimingFunction: "var(--ease-out)" }}
+        <motion.span
+          className="absolute top-[2px] left-0 size-[14px] rounded-full bg-white"
+          initial={false}
+          animate={{ x: on ? 16 : 2 }}
+          transition={reduce ? { duration: 0 } : springSettle}
         />
       </span>
     </button>
@@ -57,9 +62,13 @@ export function SettingsDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [plugins, setPlugins] = useState<{ id?: string; name?: string; enabled?: boolean }[]>([]);
+  const [version, setVersion] = useState("");
   useEffect(() => {
     if (open) void listPlugins().then((r) => setPlugins(r.plugins ?? [])).catch(() => setPlugins([]));
   }, [open]);
+  useEffect(() => {
+    void getVersion().then(setVersion).catch(() => {});
+  }, []);
 
   const {
     termFontSize,
@@ -75,12 +84,12 @@ export function SettingsDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={DIALOG_OVERLAY} />
-        <Dialog.Content className={`${DIALOG_CONTENT} w-[360px]`} style={MENU_SHADOW}>
-          <Dialog.Title className="text-[13px] font-semibold text-text-primary">
+        <Dialog.Content className={`${DIALOG_CONTENT} w-[360px]`} style={DIALOG_SHADOW}>
+          <Dialog.Title className="text-[13px] font-semibold text-balance text-text-primary">
             Settings
           </Dialog.Title>
 
-          <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted">
+          <p className="mt-4 text-[11px] font-semibold tracking-[0.02em] text-text-muted uppercase">
             Terminal
           </p>
           <div className="mt-1.5 flex items-center justify-between rounded-lg px-1 py-1.5">
@@ -90,7 +99,7 @@ export function SettingsDialog({
                 type="button"
                 aria-label="Smaller text"
                 onClick={() => setTermFontSize(termFontSize - 1)}
-                className="flex size-6 items-center justify-center rounded-md bg-[rgb(255_255_255/0.07)] text-text-secondary transition-colors duration-100 hover:text-text-primary active:scale-[0.94]"
+                className="flex size-7 items-center justify-center rounded-md bg-[rgb(255_255_255/0.07)] text-text-secondary transition-[color,scale] duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:text-text-primary active:scale-[0.97]"
               >
                 <Minus size={12} aria-hidden />
               </button>
@@ -101,14 +110,14 @@ export function SettingsDialog({
                 type="button"
                 aria-label="Larger text"
                 onClick={() => setTermFontSize(termFontSize + 1)}
-                className="flex size-6 items-center justify-center rounded-md bg-[rgb(255_255_255/0.07)] text-text-secondary transition-colors duration-100 hover:text-text-primary active:scale-[0.94]"
+                className="flex size-7 items-center justify-center rounded-md bg-[rgb(255_255_255/0.07)] text-text-secondary transition-[color,scale] duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:text-text-primary active:scale-[0.97]"
               >
                 <Plus size={12} aria-hidden />
               </button>
             </span>
           </div>
 
-          <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted">
+          <p className="mt-4 text-[11px] font-semibold tracking-[0.02em] text-text-muted uppercase">
             Notifications
           </p>
           <div className="mt-1.5">
@@ -124,7 +133,7 @@ export function SettingsDialog({
             />
           </div>
 
-          <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted">
+          <p className="mt-4 text-[11px] font-semibold tracking-[0.02em] text-text-muted uppercase">
             Appearance
           </p>
           <div className="mt-1.5">
@@ -136,13 +145,13 @@ export function SettingsDialog({
             />
           </div>
 
-          <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted">
+          <p className="mt-4 text-[11px] font-semibold tracking-[0.02em] text-text-muted uppercase">
             Herdr plugins
           </p>
           <div className="mt-1.5">
             {plugins.length === 0 ? (
-              <p className="px-1 text-[12.5px] leading-snug text-text-secondary">
-                No plugins installed on this server.
+              <p className="px-1 text-[12.5px] leading-snug text-pretty text-text-secondary">
+                No plugins on this server yet.
               </p>
             ) : (
               plugins.map((plugin, i) => (
@@ -159,10 +168,20 @@ export function SettingsDialog({
             <button
               type="button"
               onClick={() => void openUrl("https://herdr.dev/plugins/")}
-              className="mt-1 rounded-md px-1 text-[12.5px] text-text-secondary underline decoration-[rgb(255_255_255/0.2)] underline-offset-2 transition-colors duration-100 hover:text-text-primary"
+              className="mt-1 rounded-md px-1 text-[12.5px] text-text-secondary underline decoration-[rgb(255_255_255/0.2)] underline-offset-2 transition-[color] duration-[var(--dur-fast)] hover:text-text-primary"
             >
               Browse the plugin marketplace
             </button>
+          </div>
+
+          {/* Quiet about-footer: the herd mark carries the identity, the
+              version reads as a caption. Grouped from the sections above
+              with space, not a rule. */}
+          <div className="mt-7 mb-1 flex flex-col items-center gap-1.5 text-text-muted">
+            <MustrMark width={26} aria-hidden />
+            <span className="text-[11px] tabular-nums">
+              Mustr{version ? ` ${version}` : ""}
+            </span>
           </div>
         </Dialog.Content>
       </Dialog.Portal>

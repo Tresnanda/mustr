@@ -45,14 +45,13 @@ pub struct Attachment {
 
 impl Attachment {
     pub fn open(
-        session: Option<&str>,
+        server: &str,
         target: &str,
         cols: u16,
         rows: u16,
         on_event: impl Fn(TermEvent) + Send + 'static,
     ) -> Result<std::sync::Arc<Self>, String> {
-        let _ = session;
-        let (_, path) = super::servers::active_paths();
+        let (_, path) = super::servers::paths_for(server)?;
         let mut stream = Stream::connect(&path)
             .map_err(|e| format!("herdr render socket not reachable at {}: {e}", path.display()))?;
 

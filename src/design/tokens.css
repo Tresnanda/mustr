@@ -12,24 +12,28 @@
   --surface-sidebar: rgb(40 40 40 / 0.52);
   --surface-hover: rgb(255 255 255 / 0.05);
   --surface-active: rgb(255 255 255 / 0.07);
-  --selection: rgb(255 255 255 / 0.08);
+  --selection: rgb(255 255 255 / 0.09);
   --surface-inset: #191919;
 
-  /* ---- Hairlines: solid grays ---- */
-  --border-subtle: #303030;
-  --border-strong: #3c3c3c;
+  /* ---- Hairlines: quiet, almost frameless ---- */
+  --border-subtle: rgb(255 255 255 / 0.06);
+  --border-strong: rgb(255 255 255 / 0.12);
 
   /* ---- Text: ink ramp ---- */
   --text-primary: #ececec;
-  --text-secondary: #a0a0a0;
-  --text-muted: #6f6f6f;
+  --text-secondary: #9a9a9a;
+  --text-muted: #6a6a6a;
 
   /* ---- The only colors in the app ---- */
   --status-blocked: oklch(0.76 0.11 70);
   --status-blocked-soft: oklch(0.76 0.11 70 / 0.15);
   --alive: oklch(0.72 0.11 155);
-  --danger: oklch(0.67 0.19 25);
-  --danger-soft: oklch(0.67 0.19 25 / 0.15);
+  /* Destructive: filled control bg. Soft is text-on-dark only — never a
+     button fill (15% red on charcoal reads as mud). Hue 28 is system-red,
+     chroma capped for sRGB at this lightness. */
+  --danger: oklch(0.63 0.2 28);
+  --danger-hover: oklch(0.68 0.19 28);
+  --danger-soft: oklch(0.72 0.18 28);
 
   /* ---- Ink statuses ---- */
   --status-working: #b8b8b8;
@@ -44,11 +48,18 @@
     0 2px 6px rgb(0 0 0 / 0.35),
     0 14px 36px rgb(0 0 0 / 0.5);
 
+  /* ---- Stacking ---- */
+  --z-dropdown: 100;
+  --z-modal: 200;
+  --z-tooltip: 300;
+  --z-toast: 400;
+
   /* ---- Motion ---- */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --dur-fast: 120ms;
   --dur-base: 200ms;
+  --dur-slow: 300ms;
 
   /* ---- Type ---- */
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;

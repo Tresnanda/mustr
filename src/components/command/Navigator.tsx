@@ -14,8 +14,10 @@ import {
   Plus,
   SquareSplitHorizontal,
 } from "@phosphor-icons/react";
+import { DIALOG_SHADOW, MATERIAL_PANEL } from "../ui/menu";
 import { statusSince, useMustr } from "../../state/store";
 import { splitPane } from "../../bridge/herdr";
+import { openHostWindow } from "../../bridge/servers";
 import { StatusIcon, STATUS_LABEL } from "../status";
 import { cwdFolder, paneDetail, paneDisplayName } from "../../lib/names";
 import { relativeAge } from "../../lib/time";
@@ -124,22 +126,37 @@ export function Navigator({ open, onOpenChange }: { open: boolean; onOpenChange:
     }
 
     for (const server of store.servers) {
-      if (server.active) continue;
+      const icon =
+        server.kind === "local" ? (
+          <Desktop size={14} className="text-text-secondary" aria-hidden />
+        ) : (
+          <HardDrives size={14} className="text-text-secondary" aria-hidden />
+        );
+      if (server.id !== store.activeServerId) {
+        out.push({
+          key: `device:${server.id}`,
+          group: "Devices",
+          icon,
+          title: `Connect to ${server.name}`,
+          context: server.detail,
+          rank: 12,
+          haystack: `connect ${server.name} ${server.detail} device server`.toLowerCase(),
+          run: () => {
+            void store.switchServer(server.id);
+            close();
+          },
+        });
+      }
       out.push({
-        key: `device:${server.id}`,
+        key: `device-window:${server.id}`,
         group: "Devices",
-        icon:
-          server.kind === "local" ? (
-            <Desktop size={14} className="text-text-secondary" aria-hidden />
-          ) : (
-            <HardDrives size={14} className="text-text-secondary" aria-hidden />
-          ),
-        title: `Connect to ${server.name}`,
+        icon,
+        title: `Open ${server.name} in a new window`,
         context: server.detail,
-        rank: 12,
-        haystack: `connect ${server.name} ${server.detail} device server`.toLowerCase(),
+        rank: 13,
+        haystack: `open window ${server.name} ${server.detail} device server`.toLowerCase(),
         run: () => {
-          void store.switchServer(server.id);
+          void openHostWindow(server.id).then(store.loadServers);
           close();
         },
       });
@@ -209,11 +226,8 @@ export function Navigator({ open, onOpenChange }: { open: boolean; onOpenChange:
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30" />
         <Dialog.Content
-          className="fixed left-1/2 top-[18vh] z-50 w-[560px] -translate-x-1/2 overflow-hidden rounded-xl bg-[rgb(44_44_44/0.95)] backdrop-blur-2xl"
-          style={{
-            boxShadow:
-              "0 0 0 0.5px rgb(255 255 255 / 0.1), 0 18px 60px rgb(0 0 0 / 0.5)",
-          }}
+          className={`fixed left-1/2 top-[18vh] z-50 w-[560px] -translate-x-1/2 overflow-hidden rounded-xl ${MATERIAL_PANEL}`}
+          style={DIALOG_SHADOW}
           aria-label="Navigator"
         >
           <div className="flex h-12 items-center gap-2.5 border-b border-[rgb(255_255_255/0.07)] px-4">
@@ -241,8 +255,8 @@ export function Navigator({ open, onOpenChange }: { open: boolean; onOpenChange:
           </div>
           <div ref={listRef} className="max-h-[380px] overflow-y-auto p-1.5">
             {results.length === 0 && (
-              <p className="px-3 py-6 text-center text-[13px] text-text-secondary">
-                Nothing matches “{query}”.
+              <p className="px-3 py-6 text-center text-[13px] text-pretty text-text-secondary">
+                Nothing matches “{query}”. Try a different name.
               </p>
             )}
             {results.map((item, idx) => {

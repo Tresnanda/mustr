@@ -1,15 +1,18 @@
-//! Server registry and active-connection switchboard.
+//! Server registry and connection pool.
 //!
-//! Every socket user (API requests, terminal attaches, the event stream)
-//! resolves paths through `active_paths()`. Local is implicit; SSH remotes
-//! ("quickies") are persisted to the app config dir and reached by
-//! forwarding both herdr sockets over a system `ssh -N -L` child —
-//! inheriting the user's ~/.ssh/config, keys, and agent.
+//! Any number of servers can be live at once — each window binds to one
+//! server id and every socket user (API requests, terminal attaches, the
+//! event streams) resolves paths through `paths_for(id)`. Local sessions
+//! are implicit; SSH remotes ("quickies") are persisted to the app config
+//! dir and reached by forwarding both herdr sockets over a system
+//! `ssh -N -L` child — inheriting the user's ~/.ssh/config, keys, and
+//! agent. One tunnel per remote, shared by every window on that remote.
 
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -32,20 +35,49 @@ pub struct ServerRow {
     pub name: String,
     pub detail: String,
     pub kind: String, // "local" | "ssh"
-    pub active: bool,
+    /// A live pool entry exists (sockets reachable / tunnel up). Which
+    /// server a given window is *on* is that window's own state.
+    pub connected: bool,
 }
 
-struct Active {
-    server_id: String,
+struct Connection {
     api_path: PathBuf,
     client_path: PathBuf,
     tunnel: Option<Child>,
 }
 
-static ACTIVE: Mutex<Option<Active>> = Mutex::new(None);
-/// Live event-stream socket, shut down on server switch so the blocking
-/// reader wakes up and reconnects against the new paths.
-pub static EVENT_STREAM: Mutex<Option<std::os::unix::net::UnixStream>> = Mutex::new(None);
+static POOL: OnceLock<Mutex<HashMap<String, Connection>>> = OnceLock::new();
+/// Ids the user wants connected. Distinct from the pool: a supervisor
+/// rebuild empties the pool entry for a moment, but intent survives, so
+/// event streams know a gap from a deliberate disconnect.
+static WANTED: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+/// Ids with a connect attempt in flight, so concurrent callers (a window
+/// opening + a switch + the supervisor) can't race duplicate tunnels.
+static CONNECTING: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+/// Live event-stream sockets by server id, shut down on disconnect so the
+/// blocking readers wake up and exit (or reconnect against new paths).
+static EVENT_STREAMS: OnceLock<Mutex<HashMap<String, std::os::unix::net::UnixStream>>> =
+    OnceLock::new();
+
+fn pool() -> &'static Mutex<HashMap<String, Connection>> {
+    POOL.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn wanted() -> &'static Mutex<std::collections::HashSet<String>> {
+    WANTED.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+}
+
+pub fn is_wanted(id: &str) -> bool {
+    wanted().lock().unwrap().contains(id)
+}
+
+fn connecting() -> &'static Mutex<std::collections::HashSet<String>> {
+    CONNECTING.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+}
+
+fn streams() -> &'static Mutex<HashMap<String, std::os::unix::net::UnixStream>> {
+    EVENT_STREAMS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 fn config_file() -> Option<PathBuf> {
     let home = std::env::var_os("HOME")?;
@@ -70,35 +102,41 @@ fn save_remotes(remotes: &[RemoteServer]) -> Result<(), String> {
     std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
 
-/// Socket paths for the active server (Local when none was selected yet).
-pub fn active_paths() -> (PathBuf, PathBuf) {
-    let guard = ACTIVE.lock().unwrap();
-    match guard.as_ref() {
-        Some(a) => (a.api_path.clone(), a.client_path.clone()),
-        None => (
-            paths::api_socket_path(None).unwrap_or_default(),
-            paths::client_socket_path(None).unwrap_or_default(),
-        ),
+fn local_session_of(id: &str) -> Option<Option<&str>> {
+    if id == "local" {
+        Some(None)
+    } else {
+        id.strip_prefix("local:").map(Some)
     }
 }
 
-pub fn active_id() -> String {
-    ACTIVE
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map(|a| a.server_id.clone())
-        .unwrap_or_else(|| "local".into())
+/// Socket paths for one server. Local ids resolve even before `connect`
+/// so a fresh window can reach an already-running server immediately;
+/// remotes must have a live pool entry (tunnel).
+pub fn paths_for(id: &str) -> Result<(PathBuf, PathBuf), String> {
+    if let Some(c) = pool().lock().unwrap().get(id) {
+        return Ok((c.api_path.clone(), c.client_path.clone()));
+    }
+    if let Some(session) = local_session_of(id) {
+        return Ok((
+            paths::api_socket_path(session).ok_or("no home dir")?,
+            paths::client_socket_path(session).ok_or("no home dir")?,
+        ));
+    }
+    Err(format!("device '{id}' is not connected"))
+}
+
+pub fn is_connected(id: &str) -> bool {
+    pool().lock().unwrap().contains_key(id)
 }
 
 pub fn list() -> Vec<ServerRow> {
-    let active = active_id();
     let mut rows = vec![ServerRow {
         id: "local".into(),
         name: "Local".into(),
         detail: "This Mac · herdr.sock".into(),
         kind: "local".into(),
-        active: active == "local",
+        connected: is_connected("local"),
     }];
     // Named herdr sessions on this Mac: each is its own server + sockets.
     if let Some(home) = std::env::var_os("HOME") {
@@ -117,7 +155,7 @@ pub fn list() -> Vec<ServerRow> {
                     name: name.clone(),
                     detail: format!("This Mac · session {name}"),
                     kind: "local".into(),
-                    active: active == id,
+                    connected: is_connected(&id),
                 });
             }
         }
@@ -128,7 +166,7 @@ pub fn list() -> Vec<ServerRow> {
             name: r.name,
             detail: format!("{} · SSH", r.host),
             kind: "ssh".into(),
-            active: active == r.id,
+            connected: is_connected(&r.id),
         });
     }
     rows
@@ -154,9 +192,7 @@ pub fn remove(id: &str) -> Result<Vec<ServerRow>, String> {
     let mut remotes = load_remotes();
     remotes.retain(|r| r.id != id);
     save_remotes(&remotes)?;
-    if active_id() == id {
-        switch_to_local()?;
-    }
+    disconnect(id);
     Ok(list())
 }
 
@@ -182,30 +218,62 @@ fn ping_socket(path: &PathBuf) -> bool {
     BufReader::new(stream).read_line(&mut line).is_ok() && line.contains("pong")
 }
 
-fn interrupt_event_stream() {
-    if let Some(stream) = EVENT_STREAM.lock().unwrap().take() {
+pub fn register_event_stream(id: &str, stream: std::os::unix::net::UnixStream) {
+    streams().lock().unwrap().insert(id.to_owned(), stream);
+}
+
+fn interrupt_event_stream(id: &str) {
+    if let Some(stream) = streams().lock().unwrap().remove(id) {
         let _ = stream.shutdown(std::net::Shutdown::Both);
     }
 }
 
-fn install_active(active: Active) {
-    let mut guard = ACTIVE.lock().unwrap();
-    if let Some(old) = guard.take() {
-        if let Some(mut tunnel) = old.tunnel {
+/// Ensure a live connection for `id`; no-op when already pooled. Never
+/// touches other connections — windows on other servers stay live.
+pub fn connect(id: &str) -> Result<(), String> {
+    if is_connected(id) {
+        return Ok(());
+    }
+    if !connecting().lock().unwrap().insert(id.to_owned()) {
+        // Another caller is already connecting this id: wait for it.
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(200));
+            if !connecting().lock().unwrap().contains(id) {
+                return if is_connected(id) {
+                    Ok(())
+                } else {
+                    Err("could not connect".into())
+                };
+            }
+        }
+        return Err("connection attempt timed out".into());
+    }
+    let result = match local_session_of(id) {
+        Some(session) => connect_local(session),
+        None => connect_remote(id),
+    };
+    connecting().lock().unwrap().remove(id);
+    if result.is_ok() {
+        wanted().lock().unwrap().insert(id.to_owned());
+    }
+    result
+}
+
+/// Drop one connection: kill its tunnel and wake its event stream. Any
+/// window still bound to this id reports disconnected until it switches.
+pub fn disconnect(id: &str) {
+    wanted().lock().unwrap().remove(id);
+    if let Some(mut conn) = pool().lock().unwrap().remove(id) {
+        if let Some(tunnel) = conn.tunnel.as_mut() {
             let _ = tunnel.kill();
             let _ = tunnel.wait();
         }
     }
-    *guard = Some(active);
-    drop(guard);
-    interrupt_event_stream();
+    interrupt_event_stream(id);
 }
 
-pub fn switch_to_local() -> Result<(), String> {
-    switch_to_local_session(None)
-}
-
-pub fn switch_to_local_session(session: Option<&str>) -> Result<(), String> {
+fn connect_local(session: Option<&str>) -> Result<(), String> {
     let api = paths::api_socket_path(session).ok_or("no home dir")?;
     let client = paths::client_socket_path(session).ok_or("no home dir")?;
 
@@ -239,19 +307,22 @@ pub fn switch_to_local_session(session: Option<&str>) -> Result<(), String> {
         }
     }
 
-    install_active(Active {
-        server_id: match session {
-            Some(name) => format!("local:{name}"),
-            None => "local".into(),
+    let id = match session {
+        Some(name) => format!("local:{name}"),
+        None => "local".into(),
+    };
+    pool().lock().unwrap().insert(
+        id,
+        Connection {
+            api_path: api,
+            client_path: client,
+            tunnel: None,
         },
-        api_path: api,
-        client_path: client,
-        tunnel: None,
-    });
+    );
     Ok(())
 }
 
-pub fn connect_remote(id: &str) -> Result<(), String> {
+fn connect_remote(id: &str) -> Result<(), String> {
     let remote = load_remotes()
         .into_iter()
         .find(|r| r.id == id)
@@ -284,7 +355,16 @@ pub fn connect_remote(id: &str) -> Result<(), String> {
 
     let tunnel = Command::new("ssh")
         .args(["-N", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes"])
+        // Bypass connection multiplexing for the tunnel: under
+        // ControlMaster the -N child hands its forwards to the mux master
+        // and exits 0 immediately, which reads as a dead tunnel to the
+        // supervisor and flaps the connection forever. A direct child
+        // lives exactly as long as its forwards, so liveness is honest.
+        .args(["-o", "ControlMaster=no", "-o", "ControlPath=none"])
         .args(["-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3"])
+        // ANSI terminal frames compress extremely well; on a WAN link this
+        // is the difference between sluggish and instant full repaints.
+        .args(["-o", "Compression=yes"])
         .arg("-L")
         .arg(format!("{}:{home}/.config/herdr/herdr.sock", l_api.display()))
         .arg("-L")
@@ -302,12 +382,14 @@ pub fn connect_remote(id: &str) -> Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(10);
     while Instant::now() < deadline {
         if ping_socket(&l_api) {
-            install_active(Active {
-                server_id: remote.id.clone(),
-                api_path: l_api,
-                client_path: l_client,
-                tunnel: Some(tunnel),
-            });
+            pool().lock().unwrap().insert(
+                remote.id.clone(),
+                Connection {
+                    api_path: l_api,
+                    client_path: l_client,
+                    tunnel: Some(tunnel),
+                },
+            );
             return Ok(());
         }
         std::thread::sleep(Duration::from_millis(200));
@@ -350,29 +432,46 @@ pub fn ssh_aliases() -> Vec<String> {
     out
 }
 
-/// Watches the active SSH tunnel; when the ssh child dies (network drop,
-/// laptop sleep), reports disconnected and retries the same remote once per
-/// tick until it comes back.
+/// Watches every remote the user wants connected. When its ssh child dies
+/// (network drop, laptop sleep) — or an earlier reconnect failed and the
+/// pool entry is missing — reports that server disconnected and retries
+/// once per tick until it comes back or the user disconnects it.
 pub fn spawn_supervisor(app: tauri::AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(5));
-        let dead_remote = {
-            let mut guard = ACTIVE.lock().unwrap();
-            match guard.as_mut() {
-                Some(active) => match active.tunnel.as_mut() {
-                    Some(tunnel) => match tunnel.try_wait() {
-                        Ok(Some(_)) => Some(active.server_id.clone()),
-                        _ => None,
+        let remotes: Vec<String> = wanted()
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|id| !id.starts_with("local"))
+            .cloned()
+            .collect();
+        for id in remotes {
+            let dead = {
+                let mut guard = pool().lock().unwrap();
+                match guard.get_mut(&id) {
+                    Some(conn) => match conn.tunnel.as_mut() {
+                        Some(tunnel) => matches!(tunnel.try_wait(), Ok(Some(_))),
+                        None => false,
                     },
-                    None => None,
-                },
-                None => None,
+                    // Wanted but not pooled: an earlier retry failed.
+                    None => true,
+                }
+            };
+            if !dead {
+                continue;
             }
-        };
-        if let Some(id) = dead_remote {
-            let _ = app.emit("herdr-conn", json!({ "connected": false }));
+            // Drop the dead entry so connect() rebuilds the tunnel, but
+            // leave the event stream to reconnect on its own backoff.
+            if let Some(mut conn) = pool().lock().unwrap().remove(&id) {
+                if let Some(tunnel) = conn.tunnel.as_mut() {
+                    let _ = tunnel.kill();
+                    let _ = tunnel.wait();
+                }
+            }
+            let _ = app.emit("herdr-conn", json!({ "server": id, "connected": false }));
             let _ = app.emit("herdr-tunnel", json!({ "status": "reconnecting", "id": id }));
-            match connect_remote(&id) {
+            match connect(&id) {
                 Ok(()) => {
                     let _ = app.emit("herdr-tunnel", json!({ "status": "restored", "id": id }));
                 }

@@ -1,59 +1,105 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { motion, useReducedMotion } from "motion/react";
+import { Folder } from "@phosphor-icons/react";
 import { Sidebar } from "./components/sidebar/Sidebar";
-import { STATUS_LABEL } from "./components/status";
+import { StatusAnnouncer } from "./components/status";
 import { PaneGrid } from "./components/panes/PaneGrid";
 import { TabStrip } from "./components/tabs/TabStrip";
 import { dragHandlers } from "./components/DragRegion";
 import { TipProvider } from "./components/ui/Tip";
 import { Navigator } from "./components/command/Navigator";
+import { ShortcutsHelp } from "./components/ShortcutsHelp";
 import { Toasts } from "./components/feedback/Toasts";
 import { ClosePaneDialog } from "./components/panes/ClosePaneDialog";
-import { statusSince, useMustr } from "./state/store";
+import { BTN, BTN_PRIMARY } from "./components/ui/menu";
+import { MustrMark } from "./components/ui/MustrMark";
+import { useMustr } from "./state/store";
 import { lastNotified } from "./bridge/notify";
 import { connectServer } from "./bridge/servers";
 import { splitPane, zoomPane, focusPane } from "./bridge/herdr";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { paneDisplayName } from "./lib/names";
-import { relativeAge } from "./lib/time";
+import { tweenFast } from "./design/motion";
 
-/** Toolbar: pane name + space on the left, quiet status text on the right.
-    It is also the window drag surface. */
+/** Toolbar: tabs anchored leading, workspace name + shortcuts anchored
+    trailing — everything centered on one axis, macOS toolbar grammar.
+    The stretch between them is the window drag surface; the pane's own
+    status lives in the sidebar row, not up here. */
 function Toolbar() {
-  const { panes, workspaces, selectedPaneId, now } = useMustr();
+  const { panes, workspaces, selectedPaneId } = useMustr();
   const pane = panes.find((p) => p.pane_id === selectedPaneId) ?? null;
   const space = pane && workspaces.find((w) => w.workspace_id === pane.workspace_id)?.label;
-  const age = pane ? relativeAge(statusSince.get(pane.pane_id), now) : "";
-  const showStatus = pane && pane.agent_status !== "unknown";
 
   return (
     <header
       {...dragHandlers()}
-      className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-border-subtle px-4"
+      className="flex h-10 shrink-0 items-center gap-2.5 bg-[rgb(0_0_0/0.18)] pl-3 pr-5 shadow-[inset_0_-1px_0_rgb(255_255_255/0.05)]"
     >
-      {pane && (
-        <>
-          <span className="truncate text-[13px] font-semibold tracking-[-0.01em] text-text-primary">
-            {paneDisplayName(pane)}
+      <TabStrip />
+      <div className="min-w-0 flex-1 self-stretch" />
+      {space && (
+        <span className="flex min-w-0 shrink items-center gap-1.5 text-text-secondary">
+          <Folder size={13} weight="light" className="shrink-0 text-text-muted" aria-hidden />
+          <span className="min-w-0 truncate text-[12.5px] font-medium tracking-[-0.01em]">
+            {space}
           </span>
-          {space && space !== paneDisplayName(pane) && (
-            <span className="truncate text-[12px] text-text-muted">{space}</span>
-          )}
-          <span className="flex-1" />
-          {showStatus && (
-            <span
-              className={`shrink-0 text-[12px] tabular-nums ${
-                pane.agent_status === "blocked" ? "font-medium text-status-blocked" : "text-text-muted"
-              }`}
-            >
-              {STATUS_LABEL[pane.agent_status]}
-              {age ? ` · ${age}` : ""}
-            </span>
-          )}
+        </span>
+      )}
+      <ShortcutsHelp />
+    </header>
+  );
+}
+
+function EmptyState({
+  serverError,
+  onInstall,
+  onRetry,
+}: {
+  serverError: string | null;
+  onInstall: () => void;
+  onRetry: () => void;
+}) {
+  const reduce = useReducedMotion();
+  const missing = serverError?.includes("herdr-not-installed");
+
+  return (
+    <motion.div
+      className="max-w-[20rem] px-6 text-center"
+      initial={reduce || !missing ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={reduce || !missing ? { duration: 0 } : tweenFast}
+    >
+      <MustrMark width={44} className="mx-auto mb-4 text-text-muted opacity-60" aria-hidden />
+      {missing ? (
+        <>
+          <p className="text-[14px] font-semibold tracking-[-0.015em] text-balance text-text-primary">
+            Herdr isn't installed
+          </p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-pretty text-text-secondary">
+            Mustr drives the herdr runtime. Install it, then Mustr connects on its own.
+          </p>
+          <div className="mt-4 flex justify-center gap-2">
+            <button type="button" onClick={onInstall} className={BTN_PRIMARY}>
+              Get herdr
+            </button>
+            <button type="button" onClick={onRetry} className={BTN}>
+              Check again
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-[14px] font-semibold tracking-[-0.015em] text-balance text-text-primary">
+            {serverError ? "Unable to reach the herdr server" : "No pane selected"}
+          </p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-pretty text-text-secondary">
+            {serverError
+              ? "Start herdr in a terminal. Mustr reconnects automatically."
+              : "Choose an agent or terminal in the sidebar."}
+          </p>
         </>
       )}
-      {!pane && <span className="flex-1" />}
-    </header>
+    </motion.div>
   );
 }
 
@@ -74,10 +120,22 @@ export default function App() {
 
   useEffect(() => {
     void refresh();
-    const unlistenEvent = listen("herdr-event", () => scheduleRefresh());
-    const unlistenConn = listen<{ connected: boolean }>("herdr-conn", (e) =>
-      setConnected(e.payload.connected),
-    );
+    // Events are tagged with the server they came from; this window only
+    // mirrors its own. Any conn change refreshes the registry so the
+    // session switcher stays honest across windows.
+    const unlistenEvent = listen<{ server: string }>("herdr-event", (e) => {
+      if (e.payload.server === useMustr.getState().activeServerId) scheduleRefresh();
+    });
+    const unlistenConn = listen<{ server: string; connected: boolean }>("herdr-conn", (e) => {
+      const st = useMustr.getState();
+      if (e.payload.server === st.activeServerId) {
+        setConnected(e.payload.connected);
+        // Re-seed right away on restore — tab trees and snapshots may
+        // have failed while the server was unreachable.
+        if (e.payload.connected) void st.refresh();
+      }
+      void st.loadServers();
+    });
     const fallback = setInterval(refresh, 15000);
     const clock = setInterval(tick, 30000);
     // Clicking a macOS notification activates the app; route that activation
@@ -193,14 +251,19 @@ export default function App() {
   return (
     <TipProvider>
     <div className="flex h-full">
-      <aside className="w-[256px] shrink-0 border-r border-border-subtle bg-sidebar">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[var(--z-tooltip)] focus:rounded-md focus:bg-opaque focus:px-3 focus:py-1.5 focus:text-[13px] focus:text-text-primary"
+      >
+        Skip to terminals
+      </a>
+      <aside className="w-[272px] shrink-0 bg-sidebar">
         <Sidebar />
       </aside>
 
-      <div key={activeServerId} className="flex min-w-0 flex-1 flex-col bg-content">
+      <div key={activeServerId} className="flex min-w-0 flex-1 flex-col bg-content shadow-[inset_1px_0_0_rgb(255_255_255/0.05)]">
         <Toolbar />
-        <TabStrip />
-        <main className="relative min-h-0 flex-1">
+        <main id="main" className="relative min-h-0 flex-1">
           {/* Recently visited tabs stay mounted (hidden) so their pane
               connections and buffers are warm — switching is instant even
               over an SSH tunnel. */}
@@ -212,46 +275,11 @@ export default function App() {
             ))
           ) : (
             <div className="flex h-full items-center justify-center">
-              <div className="max-w-sm text-center">
-                {serverError?.includes("herdr-not-installed") ? (
-                  <>
-                    <p className="text-[13px] font-semibold text-text-primary">
-                      Herdr isn't installed
-                    </p>
-                    <p className="mt-1 text-[13px] leading-snug text-text-secondary">
-                      Mustr drives the herdr runtime. Install it, then Mustr connects
-                      on its own.
-                    </p>
-                    <div className="mt-4 flex justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void openUrl("https://herdr.dev")}
-                        className="rounded-lg bg-selection px-3 py-1.5 text-[13px] font-medium text-text-primary transition-colors duration-100 hover:bg-active active:scale-[0.97]"
-                      >
-                        Get herdr
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void connectServer("local").then(refresh)}
-                        className="rounded-lg px-3 py-1.5 text-[13px] text-text-primary transition-colors duration-100 hover:bg-hover active:scale-[0.97]"
-                      >
-                        Check again
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-[13px] font-semibold text-text-primary">
-                      {serverError ? "Can't reach the herdr server" : "No pane selected"}
-                    </p>
-                    <p className="mt-1 text-[13px] leading-snug text-text-secondary">
-                      {serverError
-                        ? "Start it by running herdr in a terminal. Mustr reconnects automatically."
-                        : "Choose an agent or terminal in the sidebar."}
-                    </p>
-                  </>
-                )}
-              </div>
+              <EmptyState
+                serverError={serverError}
+                onInstall={() => void openUrl("https://herdr.dev")}
+                onRetry={() => void connectServer(activeServerId).then(refresh)}
+              />
             </div>
           )}
         </main>
@@ -259,6 +287,7 @@ export default function App() {
     </div>
     <Navigator open={paletteOpen} onOpenChange={setPaletteOpen} />
     <Toasts />
+    <StatusAnnouncer />
     <ClosePaneDialog paneId={closingPaneId} onOpenChange={(o) => !o && setClosingPaneId(null)} />
     </TipProvider>
   );

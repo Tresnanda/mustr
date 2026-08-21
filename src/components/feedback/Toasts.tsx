@@ -3,10 +3,12 @@
 // Enter/exit follow the doctrine: small rise + fade in, faster fade out.
 
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { listen } from "@tauri-apps/api/event";
 import { CircleNotch } from "@phosphor-icons/react";
 import { useMustr } from "../../state/store";
+import { MATERIAL_PANEL, MENU_SHADOW } from "../ui/menu";
+import { easeOut, tweenBase, tweenExit } from "../../design/motion";
 
 interface Toast {
   key: string;
@@ -19,6 +21,7 @@ interface Toast {
 export function Toasts() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const servers = useMustr((s) => s.servers);
+  const reduce = useReducedMotion();
 
   useEffect(() => {
     const nameOf = (id: string) =>
@@ -56,22 +59,21 @@ export function Toasts() {
 
   return (
     <div
-      className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2"
+      className="pointer-events-none fixed right-4 bottom-4 z-[var(--z-toast)] flex flex-col items-end gap-2"
       role="status"
       aria-live="polite"
     >
-      <AnimatePresence>
+      <AnimatePresence mode="popLayout">
         {toasts.map((toast) => (
           <motion.div
             key={toast.key}
-            initial={{ opacity: 0, y: 8 }}
+            layout
+            initial={reduce ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, transition: { duration: 0.12 } }}
-            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-            className="flex items-center gap-2 rounded-lg bg-[rgb(44_44_44/0.95)] px-3 py-2 backdrop-blur-xl"
-            style={{
-              boxShadow: "0 0 0 0.5px rgb(255 255 255 / 0.1), 0 6px 20px rgb(0 0 0 / 0.35)",
-            }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, y: 12, transition: tweenExit }}
+            transition={reduce ? { duration: 0 } : { ...tweenBase, ease: easeOut }}
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 ${MATERIAL_PANEL}`}
+            style={MENU_SHADOW}
           >
             {toast.spinning && (
               <CircleNotch size={13} className="animate-spin text-text-secondary" aria-hidden />

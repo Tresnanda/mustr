@@ -41,3 +41,28 @@ updated whenever behavior is verified against a real server.
 `Welcome.error` carries a clean rejection message on mismatch, and JSON `ping.protocol`
 tells us the server's protocol before attaching. When herdr updates past 0.8.0,
 re-vendor `wire.rs` from the matching tag and bump the pin note in the file header.
+
+## How `herdr --remote` transports (from source, v0.8.0 `src/remote/unix.rs`)
+
+Read while chasing remote lag parity. herdr does **not** use `ssh -L` socket
+forwarding:
+
+- It bridges over **SSH command stdio**: a local Unix socket is served by a
+  bridge that, per connection, spawns `ssh -T <target> "herdr --remote-client-bridge"`;
+  the remote end pipes stdio ↔ the remote `herdr-client.sock`.
+- It manages its **own ssh multiplexing** (`-S <own control path>`,
+  `ControlMaster=auto`, `ControlPersist=yes`, own `-F` config), so those
+  per-connection ssh execs are ~1-RTT channel opens.
+- The thin client holds **one persistent binary-protocol connection** for the
+  whole UI — server-pushed frames, no JSON API polling in the interactive path.
+
+Confirmed in `src/api/server.rs`: `handle_connection` reads a single request
+line, responds, and returns — the JSON API is one-request-per-connection **by
+design** (only `events.subscribe` and `wait` stream). Caching/reusing API
+connections is therefore pointless; the remote-latency lever is fewer requests
+and overlapped requests, plus `Compression=yes` on our tunnel.
+
+Mustr's tunnel deliberately opts **out** of the user's ControlMaster
+(`ControlMaster=no ControlPath=none`): under muxing an `ssh -N -L` child hands
+its forwards to the master and exits 0 immediately, which breaks
+child-process-liveness supervision (see servers.rs).

@@ -7,7 +7,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { closeWorkspace, createTab, createWorktree, removeWorktree, renameWorkspace, type WorkspaceInfo } from "../../bridge/herdr";
 import { closeAutoFocus } from "../../lib/modality";
 import { useMustr } from "../../state/store";
-import { MENU_CONTENT, MENU_ITEM, MENU_ITEM_DANGER, MENU_SEPARATOR, MENU_SHADOW, DIALOG_CONTENT, DIALOG_OVERLAY } from "../ui/menu";
+import { MENU_CONTENT, MENU_ITEM, MENU_ITEM_DANGER, MENU_SEPARATOR, DIALOG_SHADOW, MENU_SHADOW, DIALOG_CONTENT, DIALOG_OVERLAY, BTN, BTN_PRIMARY, BTN_DANGER, FIELD } from "../ui/menu";
 import { RenameDialog } from "../ui/RenameDialog";
 
 export function SpaceMenu({
@@ -31,7 +31,7 @@ export function SpaceMenu({
   const makeWorktree = async () => {
     const name = branch.trim();
     if (!name || /\s/.test(name)) {
-      setBranchError("Branch names can't contain spaces.");
+      setBranchError("Use a name without spaces.");
       return;
     }
     try {
@@ -41,7 +41,7 @@ export function SpaceMenu({
       setBranch("");
       setBranchError(null);
     } catch (e) {
-      setBranchError(String(e));
+      setBranchError("Unable to create the worktree. Check the branch name and try again.");
     }
   };
   const consequence =
@@ -108,11 +108,11 @@ export function SpaceMenu({
       <Dialog.Root open={branching} onOpenChange={(o) => { setBranching(o); if (!o) setBranchError(null); }}>
         <Dialog.Portal>
           <Dialog.Overlay className={DIALOG_OVERLAY} />
-          <Dialog.Content className={DIALOG_CONTENT} style={MENU_SHADOW}>
-            <Dialog.Title className="text-[13px] font-semibold text-text-primary">
+          <Dialog.Content className={DIALOG_CONTENT} style={DIALOG_SHADOW}>
+            <Dialog.Title className="text-[13px] font-semibold text-balance text-text-primary">
               New linked worktree
             </Dialog.Title>
-            <Dialog.Description className="mt-1.5 text-[13px] leading-snug text-text-secondary">
+            <Dialog.Description className="mt-1.5 text-[13px] leading-snug text-pretty text-text-secondary">
               A second checkout of {workspace.label} on its own branch, opened as a
               new space — agents there can't collide with this one.
             </Dialog.Description>
@@ -127,7 +127,7 @@ export function SpaceMenu({
                 }}
                 placeholder="fix/scroll-jitter"
                 style={{ outline: "none" }}
-                className="mt-1.5 h-8 w-full rounded-lg border border-border-subtle bg-inset px-2.5 font-mono text-[12px] text-text-primary transition-colors duration-100 focus:border-border-strong"
+                className={`${FIELD} mt-1.5 font-mono text-[12px]`}
               />
             </label>
             <p className="mt-1.5 text-[11.5px] text-text-muted">
@@ -138,18 +138,11 @@ export function SpaceMenu({
             )}
             <div className="mt-5 flex justify-end gap-2">
               <Dialog.Close asChild>
-                <button
-                  type="button"
-                  className="rounded-lg px-3 py-1.5 text-[13px] text-text-primary transition-colors duration-100 hover:bg-hover active:scale-[0.97]"
-                >
+                <button type="button" className={BTN}>
                   Cancel
                 </button>
               </Dialog.Close>
-              <button
-                type="button"
-                onClick={() => void makeWorktree()}
-                className="rounded-lg bg-selection px-3 py-1.5 text-[13px] font-medium text-text-primary transition-colors duration-100 hover:bg-active active:scale-[0.97]"
-              >
+              <button type="button" onClick={() => void makeWorktree()} className={BTN_PRIMARY}>
                 Create worktree
               </button>
             </div>
@@ -160,20 +153,17 @@ export function SpaceMenu({
       <Dialog.Root open={removingWorktree} onOpenChange={setRemovingWorktree}>
         <Dialog.Portal>
           <Dialog.Overlay className={DIALOG_OVERLAY} />
-          <Dialog.Content className={DIALOG_CONTENT} style={MENU_SHADOW}>
-            <Dialog.Title className="text-[13px] font-semibold text-text-primary">
+          <Dialog.Content className={DIALOG_CONTENT} style={DIALOG_SHADOW}>
+            <Dialog.Title className="text-[13px] font-semibold text-balance text-text-primary">
               Remove worktree {workspace.label}?
             </Dialog.Title>
-            <Dialog.Description className="mt-1 text-[13px] leading-snug text-text-secondary">
+            <Dialog.Description className="mt-1 text-[13px] leading-snug text-pretty text-text-secondary">
               {consequence} The worktree folder is deleted; its branch and commits stay
               in the repo.
             </Dialog.Description>
             <div className="mt-4 flex justify-end gap-2">
               <Dialog.Close asChild>
-                <button
-                  type="button"
-                  className="rounded-lg px-3 py-1.5 text-[13px] text-text-primary transition-colors duration-100 hover:bg-hover active:scale-[0.97]"
-                >
+                <button type="button" className={BTN}>
                   Cancel
                 </button>
               </Dialog.Close>
@@ -184,7 +174,8 @@ export function SpaceMenu({
                     .then(refresh)
                     .finally(() => setRemovingWorktree(false));
                 }}
-                className="rounded-lg bg-danger-soft px-3 py-1.5 text-[13px] font-medium text-danger transition-colors duration-100 active:scale-[0.97]"
+                autoFocus
+                className={BTN_DANGER}
               >
                 Remove worktree
               </button>
@@ -196,19 +187,16 @@ export function SpaceMenu({
       <Dialog.Root open={closing} onOpenChange={setClosing}>
         <Dialog.Portal>
           <Dialog.Overlay className={DIALOG_OVERLAY} />
-          <Dialog.Content className={DIALOG_CONTENT} style={MENU_SHADOW}>
-            <Dialog.Title className="text-[13px] font-semibold text-text-primary">
+          <Dialog.Content className={DIALOG_CONTENT} style={DIALOG_SHADOW}>
+            <Dialog.Title className="text-[13px] font-semibold text-balance text-text-primary">
               Close space {workspace.label}?
             </Dialog.Title>
-            <Dialog.Description className="mt-1 text-[13px] leading-snug text-text-secondary">
+            <Dialog.Description className="mt-1 text-[13px] leading-snug text-pretty text-text-secondary">
               {consequence}
             </Dialog.Description>
             <div className="mt-4 flex justify-end gap-2">
               <Dialog.Close asChild>
-                <button
-                  type="button"
-                  className="rounded-lg px-3 py-1.5 text-[13px] text-text-primary transition-colors duration-100 hover:bg-hover active:scale-[0.97]"
-                >
+                <button type="button" className={BTN}>
                   Cancel
                 </button>
               </Dialog.Close>
@@ -219,7 +207,8 @@ export function SpaceMenu({
                     .then(refresh)
                     .finally(() => setClosing(false));
                 }}
-                className="rounded-lg bg-danger-soft px-3 py-1.5 text-[13px] font-medium text-danger transition-colors duration-100 active:scale-[0.97]"
+                autoFocus
+                className={BTN_DANGER}
               >
                 Close space
               </button>
