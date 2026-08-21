@@ -57,6 +57,11 @@ jobs:
 
             **Compatibility:** herdr 0.8.0 / protocol 19.
 
-            **First install (unsigned):** right-click → Open, or
+            **Install** (avoids Gatekeeper's "damaged" dialog on this unsigned app):
+            ```sh
+            curl -fsSL https://raw.githubusercontent.com/Tresnanda/mustr/main/install.sh | sh
+            ```
+            If you download the DMG in a browser instead, clear the quarantine flag
+            after copying to Applications:
             `xattr -dr com.apple.quarantine /Applications/Mustr.app`.
-            Updates after that arrive in-app.
+            Updates after the first install arrive in-app.

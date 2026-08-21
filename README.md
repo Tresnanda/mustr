@@ -21,18 +21,28 @@ real terminals attached pane-by-pane.
 
 ## Install
 
-Download the latest `.dmg` from [Releases](https://github.com/Tresnanda/mustr/releases).
+```sh
+curl -fsSL https://raw.githubusercontent.com/Tresnanda/mustr/main/install.sh | sh
+```
 
-The app is currently **unsigned** (no Apple Developer account yet), so macOS will
-quarantine it on first launch. Either right-click the app → **Open** → **Open**, or:
+That's it — the script fetches the right build for your Mac, puts it in
+/Applications, and opens it. Updates after that are delivered in-app
+(Settings → Check for updates); update artifacts are cryptographically signed.
+
+<details>
+<summary>Installing from the DMG instead</summary>
+
+You can also grab the `.dmg` from [Releases](https://github.com/Tresnanda/mustr/releases),
+but the app is **unsigned**, and macOS quarantines browser downloads — Gatekeeper
+will claim the app "is damaged" (it isn't). After dragging Mustr to Applications,
+clear the flag:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/Mustr.app
 ```
 
-Updates after that are delivered in-app (Settings → Check for updates); update
-artifacts are cryptographically signed, so the updater itself is safe despite the
-unsigned first install.
+The install script avoids all of this, which is why it's the recommended path.
+</details>
 
 ### Requirements
 
