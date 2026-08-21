@@ -171,6 +171,17 @@ export const paneResize = (attachId: string, cols: number, rows: number) =>
 export const paneScroll = (attachId: string, up: boolean, lines: number) =>
   invoke<void>("pane_scroll", { attachId, up, lines, column: null, row: null });
 
+export type MouseKind = "down" | "up" | "drag" | "move" | "scroll-up" | "scroll-down";
+export type MouseButton = "left" | "right" | "middle";
+export const paneMouse = (
+  attachId: string,
+  kind: MouseKind,
+  button: MouseButton,
+  col: number,
+  row: number,
+  modifiers = 0,
+) => invoke<void>("pane_mouse", { attachId, kind, button, col, row, modifiers });
+
 export const detachPane = (attachId: string) => invoke<void>("detach_pane", { attachId });
 
 export function decodeBase64(b64: string): Uint8Array {

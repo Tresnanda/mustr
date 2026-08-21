@@ -7,6 +7,10 @@ herdr protocol compatibility.
 
 Compatible with **herdr 0.8.0 / protocol 19**.
 
+- Fixed: clicks now reach mouse-aware apps in panes (Claude Code's UI,
+  htop, …) — mouse input is sent as the protocol's structured events
+  instead of synthesized escape bytes — and the pointer shows an arrow
+  instead of a text I-beam while the app owns the mouse.
 - Fixed: split panes can now be dragged down to a compact strip (~80px);
   the old floor was 15% of the container, which snapped small terminal
   panes back to a third of a tall column.

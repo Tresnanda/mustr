@@ -14,7 +14,8 @@ use serde::Serialize;
 
 use crate::protocol::wire::{
     self, AttachScrollDirection, AttachScrollSource, ClientKeybindings, ClientLaunchMode,
-    ClientMessage, RenderEncoding, ServerMessage,
+    ClientInputEvent, ClientMessage, ClientMouseButton, ClientMouseKind, RenderEncoding,
+    ServerMessage,
 };
 
 
@@ -177,6 +178,40 @@ impl Attachment {
             column,
             row,
             modifiers: 0,
+        })
+    }
+
+    /// Structured mouse event — the wire has a first-class Mouse message;
+    /// synthesizing SGR bytes into Input is not something the server parses.
+    pub fn mouse(
+        &self,
+        kind: &str,
+        button: &str,
+        column: u16,
+        row: u16,
+        modifiers: u8,
+    ) -> Result<(), String> {
+        let btn = match button {
+            "right" => ClientMouseButton::Right,
+            "middle" => ClientMouseButton::Middle,
+            _ => ClientMouseButton::Left,
+        };
+        let kind = match kind {
+            "down" => ClientMouseKind::Down(btn),
+            "up" => ClientMouseKind::Up(btn),
+            "drag" => ClientMouseKind::Drag(btn),
+            "move" => ClientMouseKind::Moved,
+            "scroll-up" => ClientMouseKind::ScrollUp,
+            "scroll-down" => ClientMouseKind::ScrollDown,
+            other => return Err(format!("unknown mouse kind '{other}'")),
+        };
+        self.send(&ClientMessage::InputEvents {
+            events: vec![ClientInputEvent::Mouse {
+                kind,
+                column,
+                row,
+                modifiers,
+            }],
         })
     }
 

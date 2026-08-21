@@ -20,6 +20,7 @@ import {
   decodeBase64,
   detachPane,
   paneInput,
+  paneMouse,
   paneResize,
   paneScroll,
 } from "../../bridge/herdr";
@@ -143,44 +144,50 @@ export function TerminalView({ paneId, onClosed }: Props) {
       paneInput(attachId, bytes).catch(() => {});
     });
 
-    const cellAt = (event: WheelEvent) => {
-      const rect = host.getBoundingClientRect();
-      const col = Math.min(
-        term.cols,
-        Math.max(1, Math.ceil(((event.clientX - rect.left) / rect.width) * term.cols)),
-      );
-      const row = Math.min(
-        term.rows,
-        Math.max(1, Math.ceil(((event.clientY - rect.top) / rect.height) * term.rows)),
-      );
-      return { col, row };
+    // The app owns the mouse when the server says so (MouseCapture), or
+    // when the mode-enable sequences reached xterm through the byte stream —
+    // whichever signal arrives, both the cursor and click routing follow it.
+    const isCaptured = () =>
+      mouseCaptured || (term.modes.mouseTrackingMode ?? "none") !== "none";
+    const syncCursor = () => {
+      host.classList.toggle("term-mouse-owned", isCaptured());
     };
 
     // Mouse-tracking apps (Claude Code's UI, htop, …) expect real clicks.
-    // Forward left/middle press, drag, and release as SGR sequences when the
-    // app owns the mouse. Shift bypasses forwarding so text selection always
-    // works (the same escape hatch real terminals use). Right-click stays
-    // ours (context menu).
-    let buttonHeld = -1;
-    const sgrMouse = (btn: number, event: MouseEvent, release: boolean, motion = false) => {
-      const { col, row } = cellAt(event as unknown as WheelEvent);
-      const code = btn + (motion ? 32 : 0);
-      const seq = `\x1b[<${code};${col};${row}${release ? "m" : "M"}`;
-      paneInput(attachId, new TextEncoder().encode(seq)).catch(() => {});
+    // Forward press, drag, and release as the wire's first-class Mouse
+    // messages (the server does not parse synthesized SGR bytes in Input).
+    // Shift bypasses forwarding so text selection always works (the same
+    // escape hatch real terminals use). Right-click stays ours (context
+    // menu). Coordinates are 0-based, matching the runtime's cell grid.
+    let buttonHeld: "left" | "middle" | null = null;
+    const cellAt0 = (event: MouseEvent) => {
+      const rect = host.getBoundingClientRect();
+      const col = Math.min(
+        term.cols - 1,
+        Math.max(0, Math.floor(((event.clientX - rect.left) / rect.width) * term.cols)),
+      );
+      const row = Math.min(
+        term.rows - 1,
+        Math.max(0, Math.floor(((event.clientY - rect.top) / rect.height) * term.rows)),
+      );
+      return { col, row };
     };
     const onMouseDown = (event: MouseEvent) => {
-      if (!mouseCaptured || event.shiftKey || event.button === 2) return;
-      buttonHeld = event.button === 1 ? 1 : 0;
-      sgrMouse(buttonHeld, event, false);
+      if (!isCaptured() || event.shiftKey || event.button === 2) return;
+      buttonHeld = event.button === 1 ? "middle" : "left";
+      const { col, row } = cellAt0(event);
+      paneMouse(attachId, "down", buttonHeld, col, row).catch(() => {});
     };
     const onMouseMove = (event: MouseEvent) => {
-      if (!mouseCaptured || buttonHeld < 0) return;
-      sgrMouse(buttonHeld, event, false, true);
+      if (!isCaptured() || !buttonHeld) return;
+      const { col, row } = cellAt0(event);
+      paneMouse(attachId, "drag", buttonHeld, col, row).catch(() => {});
     };
     const onMouseUp = (event: MouseEvent) => {
-      if (!mouseCaptured || buttonHeld < 0) return;
-      sgrMouse(buttonHeld, event, true);
-      buttonHeld = -1;
+      if (!isCaptured() || !buttonHeld) return;
+      const { col, row } = cellAt0(event);
+      paneMouse(attachId, "up", buttonHeld, col, row).catch(() => {});
+      buttonHeld = null;
     };
     host.addEventListener("mousedown", onMouseDown);
     host.addEventListener("mousemove", onMouseMove);
@@ -200,11 +207,12 @@ export function TerminalView({ paneId, onClosed }: Props) {
       wheelAcc -= steps * LINE_PX;
       const up = steps < 0;
       const lines = Math.min(3, Math.abs(steps));
-      if (mouseCaptured) {
-        // Child app owns the mouse: send discrete SGR wheel clicks.
-        const { col, row } = cellAt(event);
-        const seq = `\x1b[<${up ? 64 : 65};${col};${row}M`.repeat(lines);
-        paneInput(attachId, new TextEncoder().encode(seq)).catch(() => {});
+      if (isCaptured()) {
+        // Child app owns the mouse: discrete wheel clicks at the cell.
+        const { col, row } = cellAt0(event);
+        for (let i = 0; i < lines; i++) {
+          paneMouse(attachId, up ? "scroll-up" : "scroll-down", "left", col, row).catch(() => {});
+        }
       } else {
         paneScroll(attachId, up, lines).catch(() => {});
       }
@@ -240,10 +248,13 @@ export function TerminalView({ paneId, onClosed }: Props) {
             // A full repaint replaces the whole viewport; drop stale cells
             // first so regions the frame doesn't touch can't linger.
             if (event.full) term.write("\x1b[2J\x1b[H");
-            term.write(decodeBase64(event.b64));
+            // Mode changes (mouse tracking on/off) ride the byte stream;
+            // re-check ownership once xterm has parsed this chunk.
+            term.write(decodeBase64(event.b64), syncCursor);
             break;
           case "mouse_capture":
             mouseCaptured = event.enabled;
+            syncCursor();
             break;
           case "closed":
             // Dropped (server restart, or another client took the terminal

@@ -180,6 +180,19 @@ fn pane_scroll(
 }
 
 #[tauri::command]
+fn pane_mouse(
+    attach_id: String,
+    kind: String,
+    button: String,
+    col: u16,
+    row: u16,
+    modifiers: u8,
+    state: State<'_, Attachments>,
+) -> Result<(), String> {
+    get(&state, &attach_id)?.mouse(&kind, &button, col, row, modifiers)
+}
+
+#[tauri::command]
 fn detach_pane(attach_id: String, state: State<'_, Attachments>) {
     if let Some(attachment) = state.0.lock().unwrap().remove(&attach_id) {
         attachment.detach();
@@ -242,6 +255,7 @@ pub fn run() {
             pane_input,
             pane_resize,
             pane_scroll,
+            pane_mouse,
             detach_pane,
         ])
         .run(tauri::generate_context!())
