@@ -6,10 +6,40 @@
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
 import { CheckCircle, Circle, WarningCircle } from "@phosphor-icons/react";
-import { ThinkingOrb } from "thinking-orbs";
 import type { AgentStatus } from "../bridge/herdr";
 import { paneDisplayName } from "../lib/names";
 import { useMustr } from "../state/store";
+
+// Working indicator: three ink dots orbiting a common centre. Replaces the
+// thinking-orbs "breathing" orb, whose animated SVG blur filter forced the
+// backdrop-filter glass beneath it to re-rasterize every frame (~14 GPU-points
+// per orb, measured). This is transform-only — the compositor just re-rotates
+// one already-rasterized layer, no repaint, no filter — so it costs a fraction
+// while keeping live feedback. Monochrome by design: colour is reserved for
+// blocked (amber). Reduced-motion callers get the static dot instead (below).
+function TripleDotSpinner({ size }: { size: number }) {
+  const dot = Math.max(2, Math.round(size * 0.22));
+  return (
+    <div
+      className="triple-dot-spin relative text-text-secondary"
+      style={{ width: size, height: size }}
+    >
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="absolute left-1/2 top-0 rounded-full bg-current"
+          style={{
+            width: dot,
+            height: dot,
+            marginLeft: -dot / 2,
+            transformOrigin: `${dot / 2}px ${size / 2}px`,
+            transform: `rotate(${i * 120}deg)`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
 export const STATUS_LABEL: Record<AgentStatus, string> = {
   working: "Working",
@@ -37,7 +67,7 @@ function Glyph({ status, size, reduce }: { status: AgentStatus; size: number; re
       }
       return (
         <span className="inline-flex shrink-0" aria-hidden>
-          <ThinkingOrb state="breathing" size={20} theme="dark" />
+          <TripleDotSpinner size={size + 4} />
         </span>
       );
     case "idle":

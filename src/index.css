@@ -70,6 +70,17 @@ body {
   animation: status-pulse 2s ease-in-out infinite;
 }
 
+/* Working-indicator rotation (TripleDotSpinner). Transform-only, GPU-composited
+   — no filter, so it never re-blurs the glass beneath it (unlike the old
+   thinking-orb). Driven by a CSS keyframe, not a motion value, so the sidebar's
+   per-second re-renders can't reset it mid-spin (that read as twitching). */
+@keyframes spin-dots {
+  to { transform: rotate(360deg); }
+}
+.triple-dot-spin {
+  animation: spin-dots 2s linear infinite;
+}
+
 /* Overlay + dialog + popover enter/exit. Radix Presence waits on animationend.
    Overlay and dialog share duration so they move as one unit. */
 @keyframes overlay-in {
