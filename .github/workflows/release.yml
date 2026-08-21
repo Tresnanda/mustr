@@ -40,10 +40,32 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      # A self-signed certificate only resolves as a codesigning identity
-      # once the system trusts it; the runner has passwordless sudo for this.
-      - name: Trust the Mustr signing certificate
-        run: sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain .github/mustr-signing.crt
+      # A self-signed identity needs three things on the runner before
+      # codesign will resolve it: the key+cert in an unlocked keychain on
+      # the search list, a partition list letting Apple tools use the key,
+      # and system-level trust for the certificate. Tauri's own
+      # APPLE_CERTIFICATE import misses the trust half, so do it manually
+      # and let the bundler find the ambient identity.
+      - name: Import and trust the Mustr signing identity
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "$APPLE_CERTIFICATE" | base64 --decode > /tmp/mustr.p12
+          security create-keychain -p mustrci build.keychain
+          security list-keychains -d user -s build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p mustrci build.keychain
+          security set-keychain-settings build.keychain
+          security import /tmp/mustr.p12 -k build.keychain \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm -f /tmp/mustr.p12
+          security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
+            -s -k mustrci build.keychain > /dev/null
+          sudo security add-trusted-cert -d -r trustRoot \
+            -k /Library/Keychains/System.keychain .github/mustr-signing.crt
+          security find-identity -v -p codesigning build.keychain
 
       - name: Build and draft the release
         uses: tauri-apps/tauri-action@v0
@@ -56,8 +78,6 @@ jobs:
           # right-click → Open flow, and keeps macOS permissions across
           # updates. Not notarization — the curl installer stays the
           # zero-dialog path.
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: "Mustr Self-Signed"
         with:
           tagName: ${{ github.ref_name }}
