@@ -11,16 +11,24 @@ import { TerminalView } from "../terminal/TerminalView";
 import { PaneMenu } from "./PaneMenu";
 import { springSettle } from "../../design/motion";
 
-const MIN_RATIO = 0.15;
+/* Floor panes in pixels, not percent: enough for ~3 terminal rows plus the
+   pane padding. A percentage floor (15%) made a third of a tall column the
+   smallest possible terminal strip and snapped smaller drags back. Tiny
+   containers still cap the floor below half so both sides stay draggable. */
+const MIN_PANE_PX = 80;
 const HANDLE_PX = 7;
+
+function minRatioFor(span: number) {
+  return Math.min(0.4, MIN_PANE_PX / Math.max(1, span));
+}
 
 function rubberband(overshoot: number, dimension: number, constant = 0.55) {
   return (overshoot * dimension * constant) / (dimension + constant * Math.abs(overshoot));
 }
 
 function rubberbandRatio(raw: number, span: number) {
-  const min = MIN_RATIO;
-  const max = 1 - MIN_RATIO;
+  const min = minRatioFor(span);
+  const max = 1 - min;
   if (raw >= min && raw <= max) return raw;
   if (raw < min) {
     const overshootPx = (min - raw) * span;
@@ -173,7 +181,8 @@ function Node({
         }}
         onCommit={(velocityPxPerSec, span) => {
           const current = overrides.get(key) ?? node.ratio;
-          const clamped = Math.min(1 - MIN_RATIO, Math.max(MIN_RATIO, current));
+          const min = minRatioFor(span);
+          const clamped = Math.min(1 - min, Math.max(min, current));
           if (Math.abs(current - clamped) > 0.002) {
             const velocity = velocityPxPerSec / Math.max(1, span);
             animRef.current = animate(current, clamped, {

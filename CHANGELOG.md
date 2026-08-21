@@ -7,6 +7,9 @@ herdr protocol compatibility.
 
 Compatible with **herdr 0.8.0 / protocol 19**.
 
+- Fixed: split panes can now be dragged down to a compact strip (~80px);
+  the old floor was 15% of the container, which snapped small terminal
+  panes back to a third of a tall column.
 - Fixed: closing a split's sibling no longer blanks or garbles the surviving
   pane — the terminal now adopts the server's pane size and honors full
   repaints.
