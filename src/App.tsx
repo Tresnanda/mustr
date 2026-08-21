@@ -163,9 +163,11 @@ export default function App() {
         scheduleRefresh();
       }
     });
-    const unlistenGit = listen<{ summaries: Record<string, GitSummary> }>(
-      "herdr-git",
-      (e) => useMustr.getState().mergeGit(e.payload.summaries),
+    const unlistenGit = listen<{
+      summaries: Record<string, GitSummary>;
+      removed?: string[];
+    }>("herdr-git", (e) =>
+      useMustr.getState().mergeGit(e.payload.summaries, e.payload.removed),
     );
     const unlistenConn = listen<{ server: string; connected: boolean }>("herdr-conn", (e) => {
       const st = useMustr.getState();

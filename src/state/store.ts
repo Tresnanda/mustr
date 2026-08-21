@@ -109,8 +109,9 @@ interface MustrState {
   scheduleRefresh: () => void;
   /** Merge one pushed pane row (herdr pane.updated) into the mirror. */
   applyPaneUpdate: (pane: PaneInfo) => void;
-  /** Merge a pushed delta from the backend git watcher. */
-  mergeGit: (summaries: Record<string, GitSummary>) => void;
+  /** Merge a pushed delta from the backend git watcher; `removed` cwds
+      (vanished repos) are dropped from the map. */
+  mergeGit: (summaries: Record<string, GitSummary>, removed?: string[]) => void;
   /** Window became visible again; flush deferred refreshes. */
   onVisible: () => void;
   setConnected: (connected: boolean) => void;
@@ -139,7 +140,6 @@ function touchVisited(visited: string[], tabId: string | null): string[] {
 }
 
 let refreshTimer: number | null = null;
-let refreshPending = false;
 let lastStatus = new Map<string, AgentStatus>();
 let lastGitCwds: string[] | null = null;
 
@@ -301,9 +301,9 @@ export const useMustr = create<MustrState>((set, get) => ({
   },
 
   scheduleRefresh: () => {
-    // Hidden windows defer structural refreshes; one fires on visible.
+    // Hidden windows skip structural refreshes entirely; onVisible re-seeds
+    // in full on restore, so there's nothing to defer.
     if (typeof document !== "undefined" && document.visibilityState !== "visible") {
-      refreshPending = true;
       return;
     }
     if (refreshTimer != null) return;
@@ -343,14 +343,18 @@ export const useMustr = create<MustrState>((set, get) => ({
     if (!prev || prev.agent_status !== pane.agent_status) get().scheduleRefresh();
   },
 
-  mergeGit: (summaries) =>
-    set((st) => ({ git: { ...st.git, ...summaries } })),
+  mergeGit: (summaries, removed = []) =>
+    set((st) => {
+      const git = { ...st.git, ...summaries };
+      for (const cwd of removed) delete git[cwd];
+      return { git };
+    }),
 
   onVisible: () => {
-    if (refreshPending) {
-      refreshPending = false;
-      void get().refresh();
-    }
+    // A hidden window skips the 120s reconcile and defers structural
+    // refreshes; on restore always re-seed so state that aged out while
+    // minimized snaps back within one beat, queued event or not.
+    void get().refresh();
   },
 
   setConnected: (connected) => {

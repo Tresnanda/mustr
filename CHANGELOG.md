@@ -3,7 +3,9 @@
 All notable changes to Mustr. Versions are semver; each release states its
 herdr protocol compatibility.
 
-## Unreleased
+## 0.1.5 — 2026-08-21
+
+Compatible with **herdr 0.8.0 / protocol 19 and 0.8.2 / protocol 20**.
 
 - Idle resource usage fixed (issue #1): the frontend no longer polls.
   `pane.updated` events carry the full pane row and are merged directly;
@@ -14,6 +16,18 @@ herdr protocol compatibility.
   subprocess spawns per refresh. Refreshes pause while the window is
   hidden; notifications keep working. Measured idle CPU drops from ~5%
   to ~0 (see docs/perf-protocol.md).
+- Follow-up hardening on the above:
+  - The git-watcher channel is published before the watch thread starts,
+    so the first `git_summaries` call can't race registration and drop
+    its watch set.
+  - FS events are attributed to the changed repo(s) by path, so a change
+    in one repo no longer re-runs `git` across every watched repo (with a
+    full-sweep fallback for coalesced parent-dir events); an interleaved
+    watch-set update during an event burst is no longer dropped.
+  - Vanished repos (removed worktrees) are now pushed as removals over
+    `herdr-git`, so a stale branch/dirty badge clears immediately.
+  - Restoring a window that was hidden past the reconcile window re-seeds
+    in full within one beat.
 
 ## 0.1.4 — 2026-08-21
 
