@@ -226,6 +226,20 @@ export function TerminalView({ paneId, onClosed }: Props) {
         switch (event.type) {
           case "data":
             retries = 0;
+            // The server owns the pane's dimensions: when a sibling closes,
+            // herdr resizes this pane itself and streams frames at the new
+            // size — adopt it before writing, or the bytes land in a grid
+            // shaped for the old split and the screen garbles.
+            if (
+              event.cols > 0 &&
+              event.rows > 0 &&
+              (term.cols !== event.cols || term.rows !== event.rows)
+            ) {
+              term.resize(event.cols, event.rows);
+            }
+            // A full repaint replaces the whole viewport; drop stale cells
+            // first so regions the frame doesn't touch can't linger.
+            if (event.full) term.write("\x1b[2J\x1b[H");
             term.write(decodeBase64(event.b64));
             break;
           case "mouse_capture":

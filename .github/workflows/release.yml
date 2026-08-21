@@ -40,6 +40,11 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      # A self-signed certificate only resolves as a codesigning identity
+      # once the system trusts it; the runner has passwordless sudo for this.
+      - name: Trust the Mustr signing certificate
+        run: sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain .github/mustr-signing.crt
+
       - name: Build and draft the release
         uses: tauri-apps/tauri-action@v0
         env:

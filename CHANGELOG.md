@@ -7,6 +7,9 @@ herdr protocol compatibility.
 
 Compatible with **herdr 0.8.0 / protocol 19**.
 
+- Fixed: closing a split's sibling no longer blanks or garbles the surviving
+  pane — the terminal now adopts the server's pane size and honors full
+  repaints.
 - Fresh machines without herdr now see the "Herdr isn't installed" screen
   (with a Get herdr link) instead of a misleading "start herdr in a terminal"
   message; Check again now reports what it finds.
