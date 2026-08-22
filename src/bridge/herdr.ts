@@ -134,6 +134,19 @@ export const setSplitRatio = (tabId: string, path: string[], ratio: number) =>
     ratio,
   });
 
+/** Pull one pane's authoritative row. Unlike the pushed `pane.updated`
+    stream, a `pane.get` forces herdr to re-probe the pane's agent
+    classification, so it returns the cleared row after an agent exits (the
+    server never pushes that clear). Returns null on error or a bad shape. */
+export async function paneGet(paneId: string): Promise<PaneInfo | null> {
+  try {
+    const result = await apiRequest<{ pane: unknown }>("pane.get", { pane_id: paneId });
+    return isPaneRow(result.pane) ? result.pane : null;
+  } catch {
+    return null;
+  }
+}
+
 export const focusPane = (paneId: string) => apiRequest("pane.focus", { pane_id: paneId });
 /** The param is target_pane_id — `pane_id` is silently ignored and the
     split lands on the server-focused pane instead. */

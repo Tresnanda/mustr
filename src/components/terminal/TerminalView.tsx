@@ -183,16 +183,18 @@ export function TerminalView({ paneId, onClosed }: Props) {
 
     // Attach-client mouse: Input bytes reach the pty verbatim, so a probed
     // SGR click moves a mouse-tracking app's cursor to the exact cell — but
-    // blind forwarding types garbage into a plain shell. Forward only when
-    // the server's MouseCapture signal says the focused pane actually owns
-    // the mouse. We used to also forward on the `agent` flag as a fallback
-    // (from before MouseCapture existed), but that flag lingers after an
-    // agent exits — herdr doesn't push the cleared row to attach clients —
-    // so it kept forwarding clicks into the dead shell, echoing our own SGR
-    // reports (\e[<b;c;rM) back as visible garbage. MouseCapture drops as
-    // soon as the agent resets mouse mode on exit, so trust it alone. Wheel
-    // stays on AttachScroll, which the server already routes correctly.
-    const forwardClicks = () => mouseCaptured;
+    // blind forwarding types garbage into a plain shell. Forward when the
+    // server's MouseCapture signal owns the mouse, OR the pane is an agent
+    // (Claude Code's UI, …). The agent fallback is load-bearing: MouseCapture
+    // is unreliable here — it stays false even while an agent actively wants
+    // the mouse — so without it, clicks in a live agent don't register. The
+    // flip side is the fallback used to keep forwarding into a dead shell
+    // after an agent exited (echoing our own SGR reports \e[<b;c;rM as
+    // garbage) because the stale `agent` flag lingered; that's now fixed at
+    // the source — the store clears the flag ~1s after exit via a pane.get
+    // re-probe (see verifyAgentIdle) — so this reads a flag that goes false
+    // promptly. Wheel stays on AttachScroll, which the server already routes.
+    const forwardClicks = () => mouseCaptured || agentPaneRef.current;
     let buttonHeld = -1;
     const cellAt = (event: MouseEvent) => {
       const rect = host.getBoundingClientRect();
@@ -299,23 +301,10 @@ export function TerminalView({ paneId, onClosed }: Props) {
             if (event.full) term.write("\x1b[2J\x1b[H");
             term.write(decodeBase64(event.b64));
             break;
-          case "mouse_capture": {
-            const wasCaptured = mouseCaptured;
+          case "mouse_capture":
             mouseCaptured = event.enabled;
             setCapturedUi(event.enabled);
-            // A capture transition that disagrees with our agent flag is the
-            // signature of an agent boundary: capture on while not yet an
-            // agent means one likely just started (it turns mouse reporting
-            // on at startup); capture off while still an agent means one
-            // likely just exited (it resets mouse mode on the way out). herdr
-            // recomputes the agent classification lazily and never pushes the
-            // transition to attach clients, so pull one rate-limited snapshot
-            // to sync the sidebar at once instead of waiting ~15s.
-            if (event.enabled !== wasCaptured && event.enabled !== agentPaneRef.current) {
-              useMustr.getState().reconcileAgentBoundary();
-            }
             break;
-          }
           case "closed":
             // Dropped (server restart, or another client took the terminal
             // over). Reattach quietly; surface an error only when it sticks.

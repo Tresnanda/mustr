@@ -10,6 +10,7 @@ import {
   focusPane,
   focusTab,
   layoutExport,
+  paneGet,
   ping,
   sessionSnapshot,
   setBridgeServer,
@@ -135,10 +136,6 @@ interface MustrState {
   switchServer: (id: string) => Promise<void>;
   tick: () => void;
   reconcileIfStale: () => void;
-  /** A pane's mouse capture crossed its agent flag — an agent likely just
-      started (capture on, not yet an agent) or exited (capture off, still an
-      agent). Pull a fresh snapshot to sync the sidebar. */
-  reconcileAgentBoundary: () => void;
 }
 
 const WARM_TABS = 4;
@@ -158,15 +155,58 @@ const STALE_STATUS_MS = 15_000;
 const STALE_RECONCILE_MIN_GAP_MS = 20_000;
 let lastStaleReconcile = 0;
 
-// Agent-boundary self-heal (see reconcileAgentBoundary): herdr recomputes a
-// pane's agent classification lazily and doesn't push the set/cleared row to
-// attach clients when an agent starts or exits — only the mouse-capture
-// transition that comes with it (agents turn mouse reporting on at startup,
-// off on exit). Pull one snapshot to sync the sidebar at once, rate-limited
-// so ordinary capture toggles (a menu, or a non-agent mouse app like vim)
-// can't spam snapshots.
-const AGENT_BOUNDARY_RECONCILE_MIN_GAP_MS = 4_000;
-let lastAgentBoundaryReconcile = 0;
+// Agent-exit self-heal. herdr pushes the agent-*set* row on start (so new
+// agents appear instantly) but never pushes the *clear* on exit: the exiting
+// pane's last pushed row still says `agent="claude"` with the shell prompt
+// title, and only a pull (pane.get) re-probes and returns the cleared row.
+// So when an agent pane settles into idle — the state every exit lands in —
+// we pull that one pane once, ~1s later, and merge if it actually cleared.
+// A genuine idle (claude waiting at its prompt) pulls once and no-ops. The
+// debounce collapses the working↔idle micro-flaps at startup and gives a
+// sustained-idle pane exactly one cheap single-pane pull, so this never
+// polls: no timer runs while a pane sits idle after the one verify.
+const AGENT_IDLE_VERIFY_MS = 1_000;
+// A couple of retries cover the case where herdr's re-probe lags a beat
+// behind the shell prompt returning; each step is one tiny single-pane pull.
+const AGENT_IDLE_VERIFY_RETRY_MS = 1_500;
+const AGENT_IDLE_VERIFY_MAX_TRIES = 2;
+const agentIdleVerifyTimers = new Map<string, number>();
+
+function clearAgentIdleVerify(paneId: string) {
+  const timer = agentIdleVerifyTimers.get(paneId);
+  if (timer != null) {
+    clearTimeout(timer);
+    agentIdleVerifyTimers.delete(paneId);
+  }
+}
+
+function scheduleAgentIdleVerify(paneId: string, delay: number, triesLeft: number) {
+  clearAgentIdleVerify(paneId);
+  agentIdleVerifyTimers.set(
+    paneId,
+    window.setTimeout(() => void verifyAgentIdle(paneId, triesLeft), delay),
+  );
+}
+
+// Pull the pane's authoritative row; if its agent actually cleared (or
+// otherwise moved), merge it. Compares against the live store to avoid a
+// re-schedule loop — a no-op result touches nothing, so no new timer arms.
+// If the pane still reads as a live idle agent and retries remain, herdr may
+// not have re-probed yet, so try once more shortly.
+async function verifyAgentIdle(paneId: string, triesLeft: number) {
+  agentIdleVerifyTimers.delete(paneId);
+  const fresh = await paneGet(paneId);
+  if (!fresh) return;
+  const cur = useMustr.getState().panes.find((p) => p.pane_id === paneId);
+  if (!cur) return;
+  if (cur.agent !== fresh.agent || cur.agent_status !== fresh.agent_status) {
+    useMustr.getState().applyPaneUpdate(fresh);
+    return;
+  }
+  if (fresh.agent && fresh.agent_status === "idle" && triesLeft > 0) {
+    scheduleAgentIdleVerify(paneId, AGENT_IDLE_VERIFY_RETRY_MS, triesLeft - 1);
+  }
+}
 
 /** Local only: fetch the backend git cache when the set of pane cwds
     changes. The backend keeps entries fresh via FSEvents pushes
@@ -227,6 +267,8 @@ function clearStatusSmoothing() {
   for (const { timer } of pendingStatus.values()) clearTimeout(timer);
   pendingStatus.clear();
   shownStatus.clear();
+  for (const timer of agentIdleVerifyTimers.values()) clearTimeout(timer);
+  agentIdleVerifyTimers.clear();
 }
 
 /** The status to display for a pane now; schedules a deferred commit when a
@@ -432,16 +474,25 @@ export const useMustr = create<MustrState>((set, get) => ({
     trackPaneStatus(spane, st.hasLoaded);
     const panes =
       idx >= 0
-        ? // pane.updated is the full authoritative row: when an agent exits,
-          // the server drops the optional `agent` field entirely, so a plain
-          // spread can't unset a stale `prev.agent` ("claude"). Force `agent`
-          // from the incoming row so the pane flips back to a terminal at once
-          // — otherwise the sidebar keeps listing it and mouse-reporting stays
-          // on, echoing click coordinates into the dead shell.
+        ? // The row is authoritative for the fields it carries, so force
+          // `agent` from it (a plain spread couldn't unset a stale
+          // `prev.agent`). Note the *pushed* stream never clears `agent` on
+          // exit — the row keeps "claude" with a shell title; the cleared
+          // row only arrives via the pane.get pull in verifyAgentIdle below,
+          // and this same force applies it.
           st.panes.map((p, i) => (i === idx ? { ...prev, ...spane, agent: spane.agent } : p))
         : [...st.panes, spane];
     set({ panes });
     maybeFetchGit(panes, st.activeServerId);
+    // An agent pane that just settled into idle may be a real exit the server
+    // won't push a clear for — verify it once with a debounced single-pane
+    // pull. Any non-idle (or non-agent) state cancels a pending verify: the
+    // agent is demonstrably still there, or already gone.
+    if (spane.agent && spane.agent_status === "idle") {
+      scheduleAgentIdleVerify(spane.pane_id, AGENT_IDLE_VERIFY_MS, AGENT_IDLE_VERIFY_MAX_TRIES);
+    } else {
+      clearAgentIdleVerify(spane.pane_id);
+    }
     // Workspace rollups and trees come only from snapshots; refresh for
     // real when an agent changes state (rare vs title churn).
     if (!prev || prev.agent_status !== spane.agent_status) get().scheduleRefresh();
@@ -558,19 +609,6 @@ export const useMustr = create<MustrState>((set, get) => ({
       lastStaleReconcile = now;
       void st.refresh();
     }
-  },
-
-  // Called when a pane's mouse capture crosses its agent flag — the signature
-  // of an agent starting or exiting. herdr recomputes the classification on
-  // pull (snapshot) but doesn't push the transition here, so one rate-limited
-  // refresh syncs the sidebar in <1s instead of waiting for reconcileIfStale's
-  // ~15s window. Event-driven, not a poll, and a no-op merge when nothing
-  // actually changed.
-  reconcileAgentBoundary: () => {
-    const now = Date.now();
-    if (now - lastAgentBoundaryReconcile < AGENT_BOUNDARY_RECONCILE_MIN_GAP_MS) return;
-    lastAgentBoundaryReconcile = now;
-    void get().refresh();
   },
 
   loadServers: async () => {

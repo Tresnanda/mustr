@@ -3,6 +3,28 @@
 All notable changes to Mustr. Versions are semver; each release states its
 herdr protocol compatibility.
 
+## 0.2.2 — 2026-08-22
+
+Compatible with **herdr 0.8.0 / protocol 19 and 0.8.2 / protocol 20**.
+
+Corrects the agent-exit fix and a regression it caused:
+- **Fixes mouse input in agents** (regressed in 0.2.0/0.2.1). Forwarding clicks
+  was changed to trust the server's MouseCapture signal alone, but that signal
+  is unreliable — it can read false even while an agent actively wants the
+  mouse — so clicks in a live Claude Code session stopped registering. The
+  `agent` flag is load-bearing here and is restored as the fallback.
+- **Fixes the lingering agent on exit at its source.** The real cause is now
+  confirmed by watching the socket: herdr pushes the agent-*set* row on start
+  (so new agents appear instantly) but never pushes the *clear* on exit — the
+  exited pane's last pushed row still says `agent="claude"` with a shell title,
+  and only a pull (`pane.get`) re-probes and returns the cleared row. So when
+  an agent pane settles into idle — the state every exit lands in — herdr-ui
+  now does one debounced single-pane pull (~1s, with a couple of tiny retries)
+  and merges the result. A real exit clears the sidebar row and stops mouse
+  forwarding within ~1s; a genuine idle pulls once and no-ops.
+- No polling and no full-snapshot churn — a single-pane pull, armed only by an
+  agent pane going idle and disarmed as soon as it does anything else.
+
 ## 0.2.1 — 2026-08-22
 
 Compatible with **herdr 0.8.0 / protocol 19 and 0.8.2 / protocol 20**.
