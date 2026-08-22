@@ -299,17 +299,23 @@ export function TerminalView({ paneId, onClosed }: Props) {
             if (event.full) term.write("\x1b[2J\x1b[H");
             term.write(decodeBase64(event.b64));
             break;
-          case "mouse_capture":
+          case "mouse_capture": {
+            const wasCaptured = mouseCaptured;
             mouseCaptured = event.enabled;
             setCapturedUi(event.enabled);
-            // Losing capture while still flagged as an agent almost always
-            // means the agent just exited (it reset mouse mode on the way
-            // out). herdr won't push the agent-cleared row here, so pull one
-            // rate-limited snapshot to retire the stale sidebar row at once.
-            if (!event.enabled && agentPaneRef.current) {
-              useMustr.getState().reconcileAgentExit();
+            // A capture transition that disagrees with our agent flag is the
+            // signature of an agent boundary: capture on while not yet an
+            // agent means one likely just started (it turns mouse reporting
+            // on at startup); capture off while still an agent means one
+            // likely just exited (it resets mouse mode on the way out). herdr
+            // recomputes the agent classification lazily and never pushes the
+            // transition to attach clients, so pull one rate-limited snapshot
+            // to sync the sidebar at once instead of waiting ~15s.
+            if (event.enabled !== wasCaptured && event.enabled !== agentPaneRef.current) {
+              useMustr.getState().reconcileAgentBoundary();
             }
             break;
+          }
           case "closed":
             // Dropped (server restart, or another client took the terminal
             // over). Reattach quietly; surface an error only when it sticks.

@@ -3,6 +3,22 @@
 All notable changes to Mustr. Versions are semver; each release states its
 herdr protocol compatibility.
 
+## 0.2.1 — 2026-08-22
+
+Compatible with **herdr 0.8.0 / protocol 19 and 0.8.2 / protocol 20**.
+
+Agent-start sync fix (the mirror of 0.2.0's exit fix):
+- A newly started agent now appears in the sidebar at once instead of after
+  the ~15s drift reconcile (or a pane/tab switch). herdr recomputes a pane's
+  agent classification lazily and doesn't push the set/cleared row to attach
+  clients, so herdr-ui only learned of it on the next snapshot pull.
+- Both boundaries are now caught from one signal: a mouse-capture transition
+  that disagrees with the pane's current agent flag. Capture turning on while
+  the pane isn't yet an agent means one likely just started (agents enable
+  mouse reporting at startup); capture turning off while it still is means one
+  likely just exited. Either way herdr-ui pulls a single rate-limited snapshot
+  to sync the sidebar in under a second. Still event-driven, still no polling.
+
 ## 0.2.0 — 2026-08-22
 
 Compatible with **herdr 0.8.0 / protocol 19 and 0.8.2 / protocol 20**.

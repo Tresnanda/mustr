@@ -135,9 +135,10 @@ interface MustrState {
   switchServer: (id: string) => Promise<void>;
   tick: () => void;
   reconcileIfStale: () => void;
-  /** A pane lost mouse capture while still flagged as an agent — likely the
-      agent just exited. Pull a fresh snapshot to clear the stale row. */
-  reconcileAgentExit: () => void;
+  /** A pane's mouse capture crossed its agent flag — an agent likely just
+      started (capture on, not yet an agent) or exited (capture off, still an
+      agent). Pull a fresh snapshot to sync the sidebar. */
+  reconcileAgentBoundary: () => void;
 }
 
 const WARM_TABS = 4;
@@ -157,13 +158,15 @@ const STALE_STATUS_MS = 15_000;
 const STALE_RECONCILE_MIN_GAP_MS = 20_000;
 let lastStaleReconcile = 0;
 
-// Agent-exit self-heal (see reconcileAgentExit): herdr doesn't push the
-// agent-cleared row to attach clients when an agent process exits, only the
-// mouse-capture drop that comes with it. Pull one snapshot to retire the
-// stale sidebar row at once, rate-limited so ordinary capture toggles (a
-// menu opening and closing mid-session) can't spam snapshots.
-const AGENT_EXIT_RECONCILE_MIN_GAP_MS = 4_000;
-let lastAgentExitReconcile = 0;
+// Agent-boundary self-heal (see reconcileAgentBoundary): herdr recomputes a
+// pane's agent classification lazily and doesn't push the set/cleared row to
+// attach clients when an agent starts or exits — only the mouse-capture
+// transition that comes with it (agents turn mouse reporting on at startup,
+// off on exit). Pull one snapshot to sync the sidebar at once, rate-limited
+// so ordinary capture toggles (a menu, or a non-agent mouse app like vim)
+// can't spam snapshots.
+const AGENT_BOUNDARY_RECONCILE_MIN_GAP_MS = 4_000;
+let lastAgentBoundaryReconcile = 0;
 
 /** Local only: fetch the backend git cache when the set of pane cwds
     changes. The backend keeps entries fresh via FSEvents pushes
@@ -557,15 +560,16 @@ export const useMustr = create<MustrState>((set, get) => ({
     }
   },
 
-  // Called when a pane's mouse capture drops while it still shows an agent.
-  // herdr recomputes the agent classification on pull (snapshot) but doesn't
-  // push the cleared row here, so one rate-limited refresh retires the stale
-  // sidebar row in <1s instead of waiting for reconcileIfStale's ~15s window.
-  // Event-driven, not a poll, and a no-op merge when nothing actually changed.
-  reconcileAgentExit: () => {
+  // Called when a pane's mouse capture crosses its agent flag — the signature
+  // of an agent starting or exiting. herdr recomputes the classification on
+  // pull (snapshot) but doesn't push the transition here, so one rate-limited
+  // refresh syncs the sidebar in <1s instead of waiting for reconcileIfStale's
+  // ~15s window. Event-driven, not a poll, and a no-op merge when nothing
+  // actually changed.
+  reconcileAgentBoundary: () => {
     const now = Date.now();
-    if (now - lastAgentExitReconcile < AGENT_EXIT_RECONCILE_MIN_GAP_MS) return;
-    lastAgentExitReconcile = now;
+    if (now - lastAgentBoundaryReconcile < AGENT_BOUNDARY_RECONCILE_MIN_GAP_MS) return;
+    lastAgentBoundaryReconcile = now;
     void get().refresh();
   },
 
