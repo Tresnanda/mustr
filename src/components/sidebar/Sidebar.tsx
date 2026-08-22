@@ -176,20 +176,24 @@ const Row = React.forwardRef<HTMLButtonElement, RowProps>(function Row(
   );
 });
 
+/** The status/identity mark centers on the whole cell (`self-center`), not the
+    title line — the macOS list grammar for a two-line row (Mail, Messages). In
+    short rows the grid already centers it, so this only re-anchors tall rows. */
 function RowGlyph({ children }: { children?: React.ReactNode }) {
   return (
-    <span className="flex size-5 items-center justify-center text-text-secondary" aria-hidden>
+    <span className="flex size-5 items-center justify-center self-center text-text-secondary" aria-hidden>
       {children}
     </span>
   );
 }
 
-/** Text meta (counts, ages) aligns with the title line in tall rows; pass
-    `center` for whole-row affordances like the disclosure chevron, which
-    platform grammar centers on the full cell height. */
+/** The rule: structural marks center on the row, text annotations sit on the
+    title line. Text meta (counts, ages) takes the title's 19px line box so it
+    shares the title's baseline in tall rows instead of floating above it; pass
+    `center` for whole-row affordances like the disclosure chevron. */
 function RowMeta({ children, center }: { children?: React.ReactNode; center?: boolean }) {
   return (
-    <span className={`${META} text-[11px] tabular-nums text-text-muted ${center ? "self-stretch" : ""}`}>
+    <span className={`${META} text-[11px] tabular-nums text-text-muted ${center ? "self-stretch" : "h-[19px]"}`}>
       {children}
     </span>
   );

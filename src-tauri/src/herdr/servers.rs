@@ -203,6 +203,48 @@ fn md5ish(s: &str) -> u64 {
     h.finish()
 }
 
+/// Resolve the herdr executable's real path.
+///
+/// A macOS `.app` launched from Finder/Dock does NOT inherit the user's shell
+/// PATH — launchd hands it only `/usr/bin:/bin:/usr/sbin:/sbin` plus whatever
+/// `/etc/paths.d` adds (Homebrew). herdr installs to `~/.local/bin`, which is
+/// on none of those, so a bare `Command::new("herdr")` PATH lookup fails with
+/// `NotFound` even though herdr is installed — and that reads to the UI as
+/// "not installed". Resolve the path ourselves instead of trusting PATH:
+/// explicit override, then the well-known install locations, then a login
+/// shell's own `command -v` (which sees wherever the user actually put it).
+fn resolve_herdr_bin() -> Option<PathBuf> {
+    if let Some(p) = std::env::var_os("HERDR_BIN") {
+        let p = PathBuf::from(p);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(home) = std::env::var_os("HOME") {
+        candidates.push(PathBuf::from(&home).join(".local/bin/herdr"));
+    }
+    candidates.push(PathBuf::from("/opt/homebrew/bin/herdr"));
+    candidates.push(PathBuf::from("/usr/local/bin/herdr"));
+    candidates.push(PathBuf::from("/usr/bin/herdr"));
+    if let Some(hit) = candidates.into_iter().find(|c| c.is_file()) {
+        return Some(hit);
+    }
+    // Last resort: ask a login shell, which sources the user's profile and so
+    // knows the same PATH their terminal does.
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
+    let out = Command::new(shell)
+        .args(["-lc", "command -v herdr"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let path = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+    let path = PathBuf::from(path);
+    path.is_file().then_some(path)
+}
+
 fn ping_socket(path: &PathBuf) -> bool {
     let Ok(mut stream) = std::os::unix::net::UnixStream::connect(path) else {
         return false;
@@ -278,8 +320,14 @@ fn connect_local(session: Option<&str>) -> Result<(), String> {
     let client = paths::client_socket_path(session).ok_or("no home dir")?;
 
     if !ping_socket(&api) {
+        // Server isn't up. Resolve the binary before deciding it's missing:
+        // an unresolvable path is the only true "not installed", whereas a
+        // resolved binary that won't come up is a start failure — two states
+        // the UI must not conflate (one says "install herdr", the other
+        // "herdr is installed but its server didn't start").
+        let bin = resolve_herdr_bin().ok_or("herdr-not-installed")?;
         // Auto-spawn a herdr server, mirroring herdr's own autodetect launch.
-        let mut cmd = Command::new("herdr");
+        let mut cmd = Command::new(&bin);
         if let Some(name) = session {
             cmd.env("HERDR_SESSION", name);
         }
@@ -288,13 +336,7 @@ fn connect_local(session: Option<&str>) -> Result<(), String> {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    "herdr-not-installed".to_string()
-                } else {
-                    format!("could not start herdr: {e}")
-                }
-            })?;
+            .map_err(|e| format!("could not start herdr: {e}"))?;
         let deadline = Instant::now() + Duration::from_secs(15);
         while Instant::now() < deadline {
             if ping_socket(&api) {
@@ -303,7 +345,7 @@ fn connect_local(session: Option<&str>) -> Result<(), String> {
             std::thread::sleep(Duration::from_millis(150));
         }
         if !ping_socket(&api) {
-            return Err("herdr server did not come up within 15 seconds".into());
+            return Err("herdr-server-no-start".into());
         }
     }
 

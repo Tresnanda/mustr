@@ -70,15 +70,38 @@ body {
   animation: status-pulse 2s ease-in-out infinite;
 }
 
-/* Working-indicator rotation (TripleDotSpinner). Transform-only, GPU-composited
-   — no filter, so it never re-blurs the glass beneath it (unlike the old
-   thinking-orb). Driven by a CSS keyframe, not a motion value, so the sidebar's
-   per-second re-renders can't reset it mid-spin (that read as twitching). */
+/* Working-indicator rotation (TripleDotSpinner). Transform-only and filterless,
+   but note: on our transparent/vibrancy window even a pure transform re-blends
+   the glass region under it every frame at the WindowServer level — so motion
+   here is never free. Driven by a CSS keyframe, not a motion value, so the
+   sidebar's per-second re-renders can't reset it mid-spin (that read as
+   twitching). The [data-animate] gate (below) freezes it whenever the app is
+   blurred or occluded, killing that off-screen re-blend cost. */
 @keyframes spin-dots {
   to { transform: rotate(360deg); }
 }
 .triple-dot-spin {
   animation: spin-dots 2s linear infinite;
+  /* Isolate the rotation so it costs (almost) nothing over the vibrancy.
+     will-change promotes the three dots to their own compositor layer —
+     WebKit caches them as one texture and WindowServer just re-rotates it,
+     no per-frame layout or repaint. contain: strict severs the repaint-rect
+     walk up the render tree (the deep computeVisibleRectsInContainer hot path
+     in the profile), so the dirty rect handed to the compositor is just the
+     spinner's own bounds, not a slab of glass to recomposite. Safe here: the
+     element has an explicit width/height and its dots are absolutely
+     positioned within it, so nothing escapes these bounds. */
+  will-change: transform;
+  contain: strict;
+}
+
+/* Activity gate: when Mustr isn't the focused, visible app there's nobody to
+   see the motion, so pause every ambient loop. No repaints over the vibrancy
+   backdrop → no WindowServer/GPU re-blend → no idle heat. App.tsx flips
+   [data-animate] on focus/blur/visibilitychange. */
+:root[data-animate="off"] .triple-dot-spin,
+:root[data-animate="off"] .status-dot-working {
+  animation-play-state: paused;
 }
 
 /* Overlay + dialog + popover enter/exit. Radix Presence waits on animationend.

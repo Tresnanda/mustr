@@ -61,14 +61,20 @@ function EmptyState({
   onRetry: () => void;
 }) {
   const reduce = useReducedMotion();
+  // Three distinct verdicts, never conflated:
+  //   missing   — herdr binary can't be found → offer to install it.
+  //   noStart   — herdr is installed but its server wouldn't start → retry.
+  //   otherwise — a live socket went unreachable (or just no pane selected).
   const missing = serverError?.includes("herdr-not-installed");
+  const noStart = serverError?.includes("herdr-server-no-start");
+  const guided = missing || noStart;
 
   return (
     <motion.div
       className="max-w-[20rem] px-6 text-center"
-      initial={reduce || !missing ? false : { opacity: 0, y: 8 }}
+      initial={reduce || !guided ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={reduce || !missing ? { duration: 0 } : tweenFast}
+      transition={reduce || !guided ? { duration: 0 } : tweenFast}
     >
       <MustrMark width={44} className="mx-auto mb-4 text-text-muted opacity-60" aria-hidden />
       {missing ? (
@@ -85,6 +91,22 @@ function EmptyState({
             </button>
             <button type="button" onClick={onRetry} className={BTN}>
               Check again
+            </button>
+          </div>
+        </>
+      ) : noStart ? (
+        <>
+          <p className="text-[14px] font-semibold tracking-[-0.015em] text-balance text-text-primary">
+            Herdr didn't start
+          </p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-pretty text-text-secondary">
+            Herdr is installed, but its server didn't come up. Try again, or start it
+            with <code className="rounded bg-inset px-1 py-0.5 text-[12px]">herdr</code> in
+            a terminal.
+          </p>
+          <div className="mt-4 flex justify-center">
+            <button type="button" onClick={onRetry} className={BTN_PRIMARY}>
+              Try again
             </button>
           </div>
         </>
@@ -193,13 +215,27 @@ export default function App() {
     const freshness = setInterval(() => {
       if (!document.hidden) useMustr.getState().reconcileIfStale();
     }, 10000);
+    // Animation activity gate. Motion over the window's vibrancy backdrop
+    // forces WindowServer + the WebKit GPU process to re-blend the glass
+    // every frame — cheap when you're looking, pure wasted heat when the
+    // app is blurred or occluded. Continuous animations (the working
+    // spinner) key off [data-animate] so they freeze whenever the app
+    // isn't the thing on screen, and resume, fully smooth, when it is.
+    const syncAnimate = () => {
+      const active = document.hasFocus() && !document.hidden;
+      document.documentElement.dataset.animate = active ? "on" : "off";
+    };
+    syncAnimate();
     const onVisibility = () => {
+      syncAnimate();
       if (!document.hidden) useMustr.getState().onVisible();
     };
     document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("blur", syncAnimate);
     // Clicking a macOS notification activates the app; route that activation
     // to the notified pane when it happens within half a minute.
     const onActivate = () => {
+      syncAnimate();
       if (lastNotified && Date.now() - lastNotified.at < 30_000) {
         useMustr.getState().selectPane(lastNotified.paneId);
       }
@@ -302,6 +338,7 @@ export default function App() {
       clearInterval(clock);
       clearInterval(freshness);
       window.removeEventListener("focus", onActivate);
+      window.removeEventListener("blur", syncAnimate);
       window.removeEventListener("keydown", onShortcut, true);
       document.removeEventListener("visibilitychange", onVisibility);
       unlistenEvent.then((fn) => fn());
