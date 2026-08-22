@@ -2,6 +2,7 @@
 //! terminal attach actors speaking the binary render protocol.
 
 pub mod api;
+pub mod clipboard;
 pub mod events;
 pub mod gitinfo;
 pub mod paths;

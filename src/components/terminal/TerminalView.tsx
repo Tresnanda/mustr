@@ -19,10 +19,12 @@ import {
   attachPane,
   decodeBase64,
   detachPane,
+  paneClipboardImage,
   paneInput,
   paneResize,
   paneScroll,
 } from "../../bridge/herdr";
+import { chordMatches } from "../../lib/keychord";
 import { tweenBase, tweenExit } from "../../design/motion";
 
 const REDUCED_TRANSPARENCY =
@@ -75,6 +77,18 @@ export function TerminalView({ paneId, onClosed }: Props) {
   /** Live mirror for the attach closure, which must not re-run on change. */
   const agentPaneRef = useRef(false);
   agentPaneRef.current = isAgentPane;
+
+  // Remote image paste (herdr's `remote_image_paste`): only meaningful on an
+  // SSH server, where the agent runs on the far host and can't see the local
+  // clipboard. Mirrored into refs so the attach effect need not re-run.
+  const isRemote = useMustr(
+    (s) => s.servers.find((x) => x.id === s.activeServerId)?.kind === "ssh",
+  );
+  const pasteChord = useMustr((s) => s.remoteImagePasteKey);
+  const isRemoteRef = useRef(false);
+  isRemoteRef.current = isRemote;
+  const pasteChordRef = useRef(pasteChord);
+  pasteChordRef.current = pasteChord;
 
   // Live font size: applies to the running terminal, then refits.
   useEffect(() => {
@@ -213,6 +227,23 @@ export function TerminalView({ paneId, onClosed }: Props) {
     host.addEventListener("mousemove", onMouseMove);
     host.addEventListener("mouseup", onMouseUp);
 
+    // Remote image paste: intercept the configured chord (default Ctrl+V) in
+    // the capture phase — before xterm turns it into a raw ^V that the far
+    // agent chokes on — and bridge the local clipboard image instead. Only
+    // on SSH servers; local panes keep the key's normal terminal behaviour.
+    const toast = (text: string) =>
+      window.dispatchEvent(
+        new CustomEvent("mustr:toast", { detail: { text, key: "remote-image-paste" } }),
+      );
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isRemoteRef.current) return;
+      if (!chordMatches(pasteChordRef.current, event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      paneClipboardImage(attachId).catch((err) => toast(String(err)));
+    };
+    host.addEventListener("keydown", onKeyDown, true);
+
     // Capture phase: beat xterm's viewport to the event. Trackpads flood
     // small-delta events, so accumulate and emit one line per LINE_PX of
     // actual travel — never a minimum line per event (that overshoots).
@@ -302,6 +333,7 @@ export function TerminalView({ paneId, onClosed }: Props) {
       host.removeEventListener("mousedown", onMouseDown);
       host.removeEventListener("mousemove", onMouseMove);
       host.removeEventListener("mouseup", onMouseUp);
+      host.removeEventListener("keydown", onKeyDown, true);
       detachPane(attachId).catch(() => {});
       termRef.current = null;
       fitRef.current = null;

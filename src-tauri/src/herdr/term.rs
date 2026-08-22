@@ -152,6 +152,11 @@ impl Attachment {
         self.send(&ClientMsg::Input { data })
     }
 
+    /// Bridges a local clipboard image to the (remote) server for paste.
+    pub fn clipboard_image(&self, extension: String, data: Vec<u8>) -> Result<(), String> {
+        self.send(&ClientMsg::ClipboardImage { extension, data })
+    }
+
     pub fn resize(&self, cols: u16, rows: u16) -> Result<(), String> {
         self.send(&ClientMsg::Resize { cols, rows })
     }

@@ -174,6 +174,25 @@ fn pane_input(attach_id: String, b64: String, state: State<'_, Attachments>) -> 
     attachment.input(data)
 }
 
+/// Reads this machine's clipboard image and bridges it to the pane's
+/// (remote) server for paste — the GUI counterpart to herdr's
+/// `remote_image_paste`. Async + spawn_blocking: osascript can take ~100ms
+/// and must not stall the UI thread. On success the far-side agent receives
+/// the image; errors ("no image", "too large") bubble up for a toast.
+#[tauri::command]
+async fn pane_clipboard_image(
+    attach_id: String,
+    state: State<'_, Attachments>,
+) -> Result<(), String> {
+    let attachment = get(&state, &attach_id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let image = herdr::clipboard::read_image()?;
+        attachment.clipboard_image(image.extension, image.data)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 fn pane_resize(
     attach_id: String,
@@ -258,6 +277,7 @@ pub fn run() {
             open_host_window,
             attach_pane,
             pane_input,
+            pane_clipboard_image,
             pane_resize,
             pane_scroll,
             detach_pane,

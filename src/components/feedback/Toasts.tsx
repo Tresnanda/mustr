@@ -66,10 +66,17 @@ export function Toasts() {
       );
     };
     window.addEventListener("mustr:update-available", onUpdate);
+    // Generic one-shot toasts (e.g. remote image-paste feedback).
+    const onToast = (e: Event) => {
+      const { text, key } = (e as CustomEvent<{ text: string; key?: string }>).detail;
+      put({ key: key ?? `toast:${text}`, text, spinning: false, sticky: false }, 3500);
+    };
+    window.addEventListener("mustr:toast", onToast);
 
     return () => {
       unlisten.then((fn) => fn());
       window.removeEventListener("mustr:update-available", onUpdate);
+      window.removeEventListener("mustr:toast", onToast);
     };
   }, [servers.length]);
 

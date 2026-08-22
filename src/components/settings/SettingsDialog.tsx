@@ -11,6 +11,7 @@ import { listPlugins } from "../../bridge/herdr";
 import { useMustr } from "../../state/store";
 import { DIALOG_CONTENT, DIALOG_OVERLAY, DIALOG_SHADOW } from "../ui/menu";
 import { MustrMark } from "../ui/MustrMark";
+import { chordFromEvent, chordLabel } from "../../lib/keychord";
 import { springSettle } from "../../design/motion";
 import { checkForUpdate, installUpdate, restartToUpdate, useUpdateState } from "../../lib/updates";
 
@@ -101,6 +102,57 @@ function ToggleRow({
   );
 }
 
+/** Records a keyboard chord: click to arm, then the next key press is saved.
+    Escape cancels; Backspace/Delete clears (disables the bind). */
+function KeybindRow({
+  label,
+  detail,
+  chord,
+  onChange,
+}: {
+  label: string;
+  detail?: string;
+  chord: string;
+  onChange: (chord: string) => void;
+}) {
+  const [recording, setRecording] = useState(false);
+  return (
+    <div className="flex w-full items-center gap-3 rounded-lg px-1 py-1.5">
+      <span className="min-w-0 flex-1">
+        <span className="block text-[13px] text-text-primary">{label}</span>
+        {detail && <span className="block text-[11.5px] text-text-secondary">{detail}</span>}
+      </span>
+      <button
+        type="button"
+        onClick={() => setRecording(true)}
+        onBlur={() => setRecording(false)}
+        onKeyDown={(e) => {
+          if (!recording) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.key === "Escape") return setRecording(false);
+          if (e.key === "Backspace" || e.key === "Delete") {
+            onChange("");
+            return setRecording(false);
+          }
+          const next = chordFromEvent(e.nativeEvent);
+          if (!next) return; // bare modifier — keep waiting for the key
+          onChange(next);
+          setRecording(false);
+        }}
+        aria-label={`${label}: ${recording ? "press keys" : chordLabel(chord)}`}
+        className={`min-w-14 shrink-0 rounded-md px-2 py-1 text-center text-[12px] tabular-nums transition-[background-color,color] duration-[var(--dur-fast)] ease-[var(--ease-out)] ${
+          recording
+            ? "bg-alive/20 text-text-primary"
+            : "bg-[rgb(255_255_255/0.07)] text-text-secondary hover:text-text-primary"
+        }`}
+      >
+        {recording ? "Press keys…" : chordLabel(chord)}
+      </button>
+    </div>
+  );
+}
+
 export function SettingsDialog({
   open,
   onOpenChange,
@@ -125,6 +177,8 @@ export function SettingsDialog({
     setNotifyPref,
     appearance,
     setAppearance,
+    remoteImagePasteKey,
+    setRemoteImagePasteKey,
   } = useMustr();
 
   return (
@@ -162,6 +216,18 @@ export function SettingsDialog({
                 <Plus size={12} aria-hidden />
               </button>
             </span>
+          </div>
+
+          <p className="mt-4 text-[11px] font-semibold tracking-[0.02em] text-text-muted uppercase">
+            Remote sessions
+          </p>
+          <div className="mt-1.5">
+            <KeybindRow
+              label="Paste image over SSH"
+              detail="Send the clipboard image to a remote agent"
+              chord={remoteImagePasteKey}
+              onChange={setRemoteImagePasteKey}
+            />
           </div>
 
           <p className="mt-4 text-[11px] font-semibold tracking-[0.02em] text-text-muted uppercase">

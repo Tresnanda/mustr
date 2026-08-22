@@ -186,6 +186,12 @@ export function paneInput(attachId: string, data: Uint8Array): Promise<void> {
   return invoke("pane_input", { attachId, b64: btoa(binary) });
 }
 
+/** Read this machine's clipboard image and bridge it to the pane's (remote)
+    server for paste. Rejects with a human message ("no image on the
+    clipboard", "…too large…") the caller can surface as a toast. */
+export const paneClipboardImage = (attachId: string) =>
+  invoke<void>("pane_clipboard_image", { attachId });
+
 export const paneResize = (attachId: string, cols: number, rows: number) =>
   invoke<void>("pane_resize", { attachId, cols, rows });
 

@@ -59,6 +59,9 @@ impl Gen {
 pub enum ClientMsg {
     Hello { cols: u16, rows: u16 },
     Input { data: Vec<u8> },
+    /// Local clipboard image bridged to a remote server for paste (herdr's
+    /// `remote_image_paste`). `extension` is the format without a leading dot.
+    ClipboardImage { extension: String, data: Vec<u8> },
     Resize { cols: u16, rows: u16 },
     Scroll { up: bool, lines: u16, column: Option<u16>, row: Option<u16> },
     ControlTerminal { target: String, takeover: bool },
@@ -124,6 +127,10 @@ impl Codec {
                 launch_mode: ClientLaunchMode::TerminalAttach,
             },
             ClientMsg::Input { data } => M::Input { data: data.clone() },
+            ClientMsg::ClipboardImage { extension, data } => M::ClipboardImage {
+                extension: extension.clone(),
+                data: data.clone(),
+            },
             ClientMsg::Resize { cols, rows } => M::Resize {
                 cols: *cols,
                 rows: *rows,
@@ -160,6 +167,10 @@ impl Codec {
                 launch_mode: ClientLaunchMode::TerminalAttach,
             },
             ClientMsg::Input { data } => M::Input { data: data.clone() },
+            ClientMsg::ClipboardImage { extension, data } => M::ClipboardImage {
+                extension: extension.clone(),
+                data: data.clone(),
+            },
             ClientMsg::Resize { cols, rows } => M::Resize {
                 cols: *cols,
                 rows: *rows,

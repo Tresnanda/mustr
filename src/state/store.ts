@@ -94,10 +94,14 @@ interface MustrState {
   notifyBlocked: boolean;
   notifyDone: boolean;
   appearance: "glass" | "solid";
+  /** Chord (e.g. "ctrl+v") that bridges a local clipboard image into a
+      remote (SSH) session; empty = disabled. See lib/keychord. */
+  remoteImagePasteKey: string;
   setTermFontSize: (px: number) => void;
   setFindOpen: (open: boolean) => void;
   setNotifyPref: (kind: "blocked" | "done", on: boolean) => void;
   setAppearance: (a: "glass" | "solid") => void;
+  setRemoteImagePasteKey: (chord: string) => void;
   servers: ServerRow[];
   activeServerId: string;
   /** Server id currently connecting, for pending UI. */
@@ -291,6 +295,11 @@ export const useMustr = create<MustrState>((set, get) => ({
   notifyBlocked: localStorage.getItem("mustr:notifyBlocked") !== "off",
   notifyDone: localStorage.getItem("mustr:notifyDone") !== "off",
   appearance: (localStorage.getItem("mustr:appearance") as "glass" | "solid") || "glass",
+  remoteImagePasteKey: localStorage.getItem("mustr:remoteImagePasteKey") ?? "ctrl+v",
+  setRemoteImagePasteKey: (chord) => {
+    localStorage.setItem("mustr:remoteImagePasteKey", chord);
+    set({ remoteImagePasteKey: chord });
+  },
   setNotifyPref: (kind, on) => {
     localStorage.setItem(kind === "blocked" ? "mustr:notifyBlocked" : "mustr:notifyDone", on ? "on" : "off");
     set(kind === "blocked" ? { notifyBlocked: on } : { notifyDone: on });
@@ -409,7 +418,13 @@ export const useMustr = create<MustrState>((set, get) => ({
     trackPaneStatus(spane, st.hasLoaded);
     const panes =
       idx >= 0
-        ? st.panes.map((p, i) => (i === idx ? { ...prev, ...spane } : p))
+        ? // pane.updated is the full authoritative row: when an agent exits,
+          // the server drops the optional `agent` field entirely, so a plain
+          // spread can't unset a stale `prev.agent` ("claude"). Force `agent`
+          // from the incoming row so the pane flips back to a terminal at once
+          // — otherwise the sidebar keeps listing it and mouse-reporting stays
+          // on, echoing click coordinates into the dead shell.
+          st.panes.map((p, i) => (i === idx ? { ...prev, ...spane, agent: spane.agent } : p))
         : [...st.panes, spane];
     set({ panes });
     maybeFetchGit(panes, st.activeServerId);
