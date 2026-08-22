@@ -3,6 +3,25 @@
 All notable changes to Mustr. Versions are semver; each release states its
 herdr protocol compatibility.
 
+## 0.2.0 — 2026-08-22
+
+Compatible with **herdr 0.8.0 / protocol 19 and 0.8.2 / protocol 20**.
+
+Agent-exit sync fix:
+- When an interactive agent (Claude Code, …) exits back to the shell, the
+  pane now stops behaving like an agent immediately. herdr doesn't push the
+  agent-cleared row to attach clients on exit, so the stale `agent` flag used
+  to linger — the sidebar kept listing the pane as an agent, and clicks in the
+  reverted shell were still forwarded as mouse reports, echoing raw SGR
+  sequences (`\e[<b;c;rM`) back as visible garbage.
+- Click forwarding now trusts the server's MouseCapture signal alone instead
+  of falling back to the (lingering) agent flag, so a plain shell never
+  receives synthetic mouse reports. The stale sidebar row clears in under a
+  second: losing mouse capture while still flagged as an agent triggers one
+  rate-limited snapshot, rather than waiting for the ~15s drift reconcile.
+- No new timers or polling — the refresh is event-driven off the existing
+  MouseCapture push and rate-limited, preserving the renderer/power budget.
+
 ## 0.1.6 — 2026-08-22
 
 Compatible with **herdr 0.8.0 / protocol 19 and 0.8.2 / protocol 20**.

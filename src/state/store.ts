@@ -135,6 +135,9 @@ interface MustrState {
   switchServer: (id: string) => Promise<void>;
   tick: () => void;
   reconcileIfStale: () => void;
+  /** A pane lost mouse capture while still flagged as an agent — likely the
+      agent just exited. Pull a fresh snapshot to clear the stale row. */
+  reconcileAgentExit: () => void;
 }
 
 const WARM_TABS = 4;
@@ -153,6 +156,14 @@ let lastGitCwds: string[] | null = null;
 const STALE_STATUS_MS = 15_000;
 const STALE_RECONCILE_MIN_GAP_MS = 20_000;
 let lastStaleReconcile = 0;
+
+// Agent-exit self-heal (see reconcileAgentExit): herdr doesn't push the
+// agent-cleared row to attach clients when an agent process exits, only the
+// mouse-capture drop that comes with it. Pull one snapshot to retire the
+// stale sidebar row at once, rate-limited so ordinary capture toggles (a
+// menu opening and closing mid-session) can't spam snapshots.
+const AGENT_EXIT_RECONCILE_MIN_GAP_MS = 4_000;
+let lastAgentExitReconcile = 0;
 
 /** Local only: fetch the backend git cache when the set of pane cwds
     changes. The backend keeps entries fresh via FSEvents pushes
@@ -544,6 +555,18 @@ export const useMustr = create<MustrState>((set, get) => ({
       lastStaleReconcile = now;
       void st.refresh();
     }
+  },
+
+  // Called when a pane's mouse capture drops while it still shows an agent.
+  // herdr recomputes the agent classification on pull (snapshot) but doesn't
+  // push the cleared row here, so one rate-limited refresh retires the stale
+  // sidebar row in <1s instead of waiting for reconcileIfStale's ~15s window.
+  // Event-driven, not a poll, and a no-op merge when nothing actually changed.
+  reconcileAgentExit: () => {
+    const now = Date.now();
+    if (now - lastAgentExitReconcile < AGENT_EXIT_RECONCILE_MIN_GAP_MS) return;
+    lastAgentExitReconcile = now;
+    void get().refresh();
   },
 
   loadServers: async () => {

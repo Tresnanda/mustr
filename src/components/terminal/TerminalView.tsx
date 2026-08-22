@@ -181,15 +181,18 @@ export function TerminalView({ paneId, onClosed }: Props) {
       paneInput(attachId, bytes).catch(() => {});
     });
 
-    // Attach-client mouse, per live-server probing (see protocol-notes):
-    // the server gives attach clients no mouse-state signal and no click
-    // message, but Input bytes reach the pty verbatim — a probed SGR click
-    // moves vim's cursor to the exact cell. Blind forwarding types garbage
-    // into shells, so clicks forward only where a mouse-tracking app is
-    // known to live: agent panes (Claude Code's UI, …), or whenever the
-    // server someday says the pane owns the mouse. Wheel stays on
-    // AttachScroll, which the server already routes correctly.
-    const forwardClicks = () => mouseCaptured || agentPaneRef.current;
+    // Attach-client mouse: Input bytes reach the pty verbatim, so a probed
+    // SGR click moves a mouse-tracking app's cursor to the exact cell — but
+    // blind forwarding types garbage into a plain shell. Forward only when
+    // the server's MouseCapture signal says the focused pane actually owns
+    // the mouse. We used to also forward on the `agent` flag as a fallback
+    // (from before MouseCapture existed), but that flag lingers after an
+    // agent exits — herdr doesn't push the cleared row to attach clients —
+    // so it kept forwarding clicks into the dead shell, echoing our own SGR
+    // reports (\e[<b;c;rM) back as visible garbage. MouseCapture drops as
+    // soon as the agent resets mouse mode on exit, so trust it alone. Wheel
+    // stays on AttachScroll, which the server already routes correctly.
+    const forwardClicks = () => mouseCaptured;
     let buttonHeld = -1;
     const cellAt = (event: MouseEvent) => {
       const rect = host.getBoundingClientRect();
@@ -299,6 +302,13 @@ export function TerminalView({ paneId, onClosed }: Props) {
           case "mouse_capture":
             mouseCaptured = event.enabled;
             setCapturedUi(event.enabled);
+            // Losing capture while still flagged as an agent almost always
+            // means the agent just exited (it reset mouse mode on the way
+            // out). herdr won't push the agent-cleared row here, so pull one
+            // rate-limited snapshot to retire the stale sidebar row at once.
+            if (!event.enabled && agentPaneRef.current) {
+              useMustr.getState().reconcileAgentExit();
+            }
             break;
           case "closed":
             // Dropped (server restart, or another client took the terminal
