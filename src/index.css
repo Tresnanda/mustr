@@ -297,6 +297,15 @@ html.theme-switching * {
 .term-host {
   height: 100%;
   width: 100%;
+  /* Isolate the terminal's layout from the rest of the app. In glass mode
+     xterm uses the DOM renderer (WebGL can't composite transparency), so
+     every write mutates a span-per-cell tree and dirties layout. Without
+     containment that relayout propagates up the nested-flex app shell — a
+     full-shell performFlexLayout on every frame of streaming output (the
+     dominant heat source while agents work). contain: strict caps the blast
+     radius to this subtree: size is fixed by the parent (100%/100%), so
+     ancestors never relayout on a terminal write. */
+  contain: strict;
 }
 .term-host .xterm-viewport {
   background-color: transparent !important;
